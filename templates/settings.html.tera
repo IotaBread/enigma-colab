@@ -8,20 +8,26 @@
     {% if error %}
         <p>{{ error }}</p>
     {% endif %}
+    {% if msg -%}
+        <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
+    {%- endif %}
 
-    <form action="/settings" method="POST" accept-charset="utf-8">
+    <form action="/settings/repo" method="POST" accept-charset="utf-8">
         <label for="repo_url">Repo URL</label>
-        <input name="repo_url" id="repo_url" type="text" value="{{ settings.repo_url }}" />
-        {#<button formaction="/clone" formtarget="_blank" form="">Clone</button>{# TODO: if not cloned #}
-        {#<button formaction="/pull" formtarget="_blank" form="">Pull</button>#}
-        {#<button formaction="/fetch" formtarget="_blank" form="">Fetch</button>#}
+        <input name="url" id="repo_url" type="text" value="{{ settings.repo.url }}" {% if cloned %}readonly {% endif %}/>
+        <button formaction="/clone" {%- if cloned %}disabled{% endif %}>Clone</button>{% if cloned %}
+        <button formaction="/fetch" formtarget="_blank" form="">Fetch</button>
+        <button formaction="/pull" formtarget="_blank" form="">Pull</button>
+        {%- endif %}
         <br>
-
         <label for="repo_branch">Repo Branch</label> {# TODO: list branches #}
-        <input name="repo_branch" id="repo_branch" type="text" value="{{ settings.repo_branch }}" />
+        <input name="branch" id="repo_branch" type="text" value="{{ settings.repo.branch }}" />
         {#<button formaction="/checkout" formtarget="_blank">Checkout</button> {# TODO: if not current branch #}
         <br>
+        <input type="submit" value="Save repo settings" />
+    </form>
 
+    <form action="/settings" method="POST" accept-charset="utf-8">
         <label for="jar_file">Jar File</label>
         <input name="jar_file" id="jar_file" type="text" value="{{ settings.jar_file }}" /><br>
 

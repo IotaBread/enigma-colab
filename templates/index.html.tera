@@ -9,6 +9,8 @@
     {% if not logged_in %}<a href="/login">Login</a>{% else %}<a href="/logout">Logout</a>{% endif %}
     {% if admin %}<a href="/settings">Settings</a>{% endif %}
 
-    {% if msg %}<p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>{% endif %}
+    {% if msg -%}
+        <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
+    {%- endif %}
 </body>
 </html>

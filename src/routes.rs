@@ -1,17 +1,22 @@
 use std::convert::Infallible;
 use std::env;
+use std::error::Error;
+
 use crypto::digest::Digest;
 use crypto::sha3::Sha3;
+use rocket::{Request, Route};
 use rocket::form::Form;
 use rocket::http::{CookieJar, Status};
-use rocket::request::{FlashMessage, FromRequest, Outcome};
-use rocket::response::{Flash, Redirect};
-use rocket::{Request, Route};
 use rocket::outcome::IntoOutcome;
 use rocket::outcome::Outcome::Forward;
+use rocket::request::{FlashMessage, FromRequest, Outcome};
+use rocket::response::{Flash, Redirect};
+use rocket::serde::Deserialize;
 use rocket_dyn_templates::{context, Template};
+
+use crate::repo;
 use crate::settings;
-use crate::settings::Settings;
+use crate::settings::{RepoSettings, Settings};
 
 #[derive(FromForm)]
 struct Login<'r> {
@@ -58,6 +63,31 @@ impl<'r> FromRequest<'r> for AdminUser {
     }
 }
 
+#[derive(FromForm, Deserialize)]
+struct SettingsData {
+    jar_file: String,
+    mappings_file: String,
+    auto_save_interval: u16,
+    pull_cmd: String,
+    pre_session_cmd: String,
+    post_session_cmd: String,
+    enigma_args: String,
+    classpath: String,
+}
+
+impl SettingsData {
+    fn write(self, settings: &mut Settings) {
+        settings.jar_file = self.jar_file;
+        settings.mappings_file = self.mappings_file;
+        settings.auto_save_interval = self.auto_save_interval;
+        settings.pull_cmd = self.pull_cmd;
+        settings.pre_session_cmd = self.pre_session_cmd;
+        settings.post_session_cmd = self.post_session_cmd;
+        settings.enigma_args = self.enigma_args;
+        settings.classpath = self.classpath;
+    }
+}
+
 fn hash_password(password: &str) -> String {
     let mut hasher = Sha3::sha3_256();
     hasher.input_str(password);
@@ -100,7 +130,7 @@ fn logout(cookies: &CookieJar<'_>) -> Flash<Redirect> {
 }
 
 #[get("/settings")]
-async fn settings_page(admin_user: AdminUser) -> Template {
+async fn settings_page(admin_user: AdminUser, flash: Option<FlashMessage<'_>>) -> Template {
     let (settings, err) = match settings::read_settings().await {
         Ok(s) => (s, None),
         Err(e) => (Settings::default(), Some(e))
@@ -108,19 +138,44 @@ async fn settings_page(admin_user: AdminUser) -> Template {
 
     Template::render("settings", context! {
         settings: settings,
-        error: err.map(|t| {t.to_string()})
+        cloned: repo::is_cloned(),
+        error: err.map(|t| {t.to_string()}),
+        msg: flash,
     })
 }
 
-#[post("/settings", data = "<settings>")]
-async fn post_settings(admin_user: AdminUser, settings: Form<Settings>) -> Flash<Redirect> {
-    match settings::write_settings(&settings.into_inner()).await {
-        Ok(_) => Flash::success(Redirect::to(uri!(index)), "Settings updated"),
+async fn edit_settings<T: FnOnce(&mut Settings)>(redirect: Redirect, t: T) -> Flash<Redirect> {
+    let mut settings = match settings::read_settings().await {
+        Ok(s) => s,
         Err(e) => {
             println!("{}", e);
-            Flash::error(Redirect::to(uri!(index)), e.to_string())
+            return Flash::error(redirect, e.to_string())
+        }
+    };
+
+    t(&mut settings);
+
+    match settings::write_settings(&settings).await {
+        Ok(_) => Flash::success(redirect, "Settings updated"),
+        Err(e) => {
+            println!("{}", e);
+            Flash::error(redirect, e.to_string())
         }
     }
+}
+
+#[post("/settings", data = "<settings_data>")]
+async fn post_settings(admin_user: AdminUser, settings_data: Form<SettingsData>) -> Flash<Redirect> {
+    let redirect = Redirect::to(uri!(index));
+
+    edit_settings(redirect, |settings| settings_data.into_inner().write(settings)).await
+}
+
+#[post("/settings/repo", data = "<repo_settings>")]
+async fn post_repo_settings(admin_user: AdminUser, repo_settings: Form<RepoSettings>) -> Flash<Redirect> {
+    let redirect = Redirect::to(uri!(settings_page));
+
+    edit_settings(redirect, |settings| settings.repo = repo_settings.into_inner()).await
 }
 
 #[get("/settings", rank = 2)]
@@ -143,7 +198,17 @@ fn index(user: Option<User>, flash: Option<FlashMessage<'_>>) -> Template {
 }
 
 #[post("/clone")]
-fn clone(admin: AdminUser) {
+async fn clone(admin: AdminUser) -> Flash<Redirect> {
+    let redirect = Redirect::to(uri!(settings_page));
+    if repo::is_cloned() {
+        return Flash::error(redirect, "A repository already exists, can't clone");
+    }
+
+    match repo::clone().await {
+        Ok((branch, rev)) =>
+            Flash::success(redirect, format!("Cloned repo, with branch '{branch}' at {rev}")),
+        Err(e) => Flash::error(redirect, e.to_string())
+    }
 }
 
 #[post("/fetch")]
@@ -155,5 +220,8 @@ fn pull(admin: AdminUser) {
 }
 
 pub fn routes() -> Vec<Route> {
-    routes![index, login, login_page, login_form, logout, settings_page, post_settings, settings_unauthorized, settings_redirect]
+    routes![index,
+        login, login_page, login_form, logout,
+        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect,
+        clone]
 }

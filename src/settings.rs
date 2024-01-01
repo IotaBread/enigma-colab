@@ -3,25 +3,23 @@ use std::path::Path;
 use rocket::serde::{Deserialize, Serialize};
 use serde::de::Error;
 
-#[derive(Debug, Deserialize, Serialize, FromForm)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Settings {
-    repo_url: String,
-    repo_branch: String,
-    jar_file: String,
-    mappings_file: String,
-    auto_save_interval: u16,
-    pull_cmd: String,
-    pre_session_cmd: String,
-    post_session_cmd: String,
-    enigma_args: String,
-    classpath: String,
+    pub repo: RepoSettings,
+    pub jar_file: String,
+    pub mappings_file: String,
+    pub auto_save_interval: u16,
+    pub pull_cmd: String,
+    pub pre_session_cmd: String,
+    pub post_session_cmd: String,
+    pub enigma_args: String,
+    pub classpath: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            repo_url: "".to_string(),
-            repo_branch: "master".to_string(),
+            repo: RepoSettings::default(),
             jar_file: "file.jar".to_string(),
             mappings_file: "mappings/".to_string(),
             auto_save_interval: 120,
@@ -30,6 +28,21 @@ impl Default for Settings {
             post_session_cmd: "".to_string(),
             enigma_args: "".to_string(),
             classpath: "".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, FromForm)]
+pub struct RepoSettings {
+    pub url: String,
+    pub branch: String,
+}
+
+impl Default for RepoSettings {
+    fn default() -> Self {
+        RepoSettings {
+            url: "".to_string(),
+            branch: "master".to_string(),
         }
     }
 }
