@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Settings</title>
+</head>
+<body>
+    {% if error %}
+        <p>{{ error }}</p>
+    {% endif %}
+
+    <form action="/settings" method="POST" accept-charset="utf-8">
+        <label for="repo_url">Repo URL</label>
+        <input name="repo_url" id="repo_url" type="text" value="{{ settings.repo_url }}" />
+        {#<button formaction="/clone" formtarget="_blank" form="">Clone</button>{# TODO: if not cloned #}
+        {#<button formaction="/pull" formtarget="_blank" form="">Pull</button>#}
+        {#<button formaction="/fetch" formtarget="_blank" form="">Fetch</button>#}
+        <br>
+
+        <label for="repo_branch">Repo Branch</label> {# TODO: list branches #}
+        <input name="repo_branch" id="repo_branch" type="text" value="{{ settings.repo_branch }}" />
+        {#<button formaction="/checkout" formtarget="_blank">Checkout</button> {# TODO: if not current branch #}
+        <br>
+
+        <label for="jar_file">Jar File</label>
+        <input name="jar_file" id="jar_file" type="text" value="{{ settings.jar_file }}" /><br>
+
+        <label for="mappings_file">Mappings File</label>
+        <input name="mappings_file" id="mappings_file" type="text" value="{{ settings.mappings_file }}" /><br>
+
+        <label for="auto_save_interval">Auto Save Interval</label>
+        <input name="auto_save_interval" id="auto_save_interval" type="number" min="15" max="50000" value="{{ settings.auto_save_interval }}" /><br>
+
+        <label for="pull_cmd">Pull Command</label>
+        <input name="pull_cmd" id="pull_cmd" type="text" value="{{ settings.pull_cmd }}" /><br>
+
+        <label for="pre_session_cmd">Pre-Session Command</label>
+        <input name="pre_session_cmd" id="pre_session_cmd" type="text" value="{{ settings.pre_session_cmd }}" /><br>
+
+        <label for="post_session_cmd">Post-Session Command</label>
+        <input name="post_session_cmd" id="post_session_cmd" type="text" value="{{ settings.post_session_cmd }}" /><br>
+
+        <label for="enigma_args">Enigma Args</label>
+        <input name="enigma_args" id="enigma_args" type="text" value="{{ settings.enigma_args }}" /><br>
+
+        <label for="classpath">ClassPath</label>
+        <input name="classpath" id="classpath" type="text" value="{{ settings.classpath }}" /><br>
+
+        <br><a href="/">Home</a><input type="submit" value="Save">
+    </form>
+</body>
+</html>
