@@ -226,7 +226,12 @@ async fn clone_repo(admin: AdminUser) -> Flash<Redirect> {
 }
 
 #[post("/fetch")]
-fn fetch(admin: AdminUser) {
+async fn fetch(admin: AdminUser) -> Flash<Redirect> {
+    let redirect = Redirect::to(uri!(settings_page));
+    match repo::fetch() {
+        Ok(_) => Flash::success(redirect, "Fetched remote"),
+        Err(e) => Flash::error(redirect, e.to_string())
+    }
 }
 
 #[post("/pull")]
@@ -250,5 +255,5 @@ pub fn routes() -> Vec<Route> {
     routes![index,
         login, login_page, login_form, logout,
         settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect, clone_repo,
-        new_session_page, new_session_form]
+        fetch, new_session_page, new_session_form]
 }

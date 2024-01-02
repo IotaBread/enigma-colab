@@ -1,10 +1,30 @@
 use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::path::Path;
+use std::process::Command;
 
 use git2::build::RepoBuilder;
 use git2::{BranchType, Repository};
 
 use crate::settings::read_settings;
+
+#[derive(Debug)]
+struct StrError(String);
+
+impl StrError {
+    fn new(msg: &str) -> Self {
+        StrError(msg.to_string())
+    }
+}
+
+impl Display for StrError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for StrError {
+}
 
 pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
     let settings = read_settings().await?;
@@ -34,4 +54,14 @@ pub async fn list_branches() -> Result<Vec<String>, Box<dyn Error>> {
     }
 
     Ok(result)
+}
+
+pub fn fetch() -> Result<(), Box<dyn Error>> {
+    let status = Command::new("git")
+        .current_dir("data/repo")
+        .arg("fetch")
+        .status()?;
+    status.success()
+        .then_some(())
+        .ok_or(Box::from(StrError::new("fetching failed")))
 }
