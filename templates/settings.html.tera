@@ -1,10 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Settings</title>
-</head>
-<body>
+{% extends "base" %}
+{% block title %}Settings{% endblock title %}
+{% block content %}
     {% if error %}
         <p>{{ error }}</p>
     {% endif %}
@@ -59,7 +55,6 @@
         <label for="classpath">ClassPath</label>
         <input name="classpath" id="classpath" type="text" value="{{ settings.classpath }}" /><br>
 
-        <br><a href="/">Home</a><input type="submit" value="Save">
+        <br><input type="submit" value="Save">
     </form>
-</body>
-</html>
+{% endblock content %}

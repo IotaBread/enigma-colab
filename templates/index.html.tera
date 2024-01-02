@@ -1,16 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Enigma CoLab</title>
-</head>
-<body>
+{% extends "base" %}
+{% block title %}Home{% endblock title %}
+{% block content %}
     <h2>Enigma CoLab</h2>
-    {% if not logged_in %}<a href="/login">Login</a>{% else %}<a href="/logout">Logout</a>{% endif %}
-    {% if admin %}<a href="/settings">Settings</a>{% endif %}
 
     {% if msg -%}
         <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
     {%- endif %}
-</body>
-</html>
+{% endblock content %}

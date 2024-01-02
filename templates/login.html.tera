@@ -1,10 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Login</title>
-</head>
-<body>
+{% extends "base" %}
+{% block title %}Login{% endblock title %}
+{% block content %}
     <form action="/login" method="POST" accept-charset="utf-8">
         <label for="user">username</label>
         <input type="text" name="user" id="user" value="" />
@@ -12,5 +8,4 @@
         <input type="password" name="password" id="password" value="" />
         <p><input type="submit" value="Login"></p>
     </form>
-</body>
-</html>
+{% endblock content %}

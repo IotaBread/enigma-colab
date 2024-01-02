@@ -101,7 +101,9 @@ fn login(user: User) -> Redirect {
 
 #[get("/login", rank = 2)]
 fn login_page() -> Template {
-    Template::render("login", context! {})
+    Template::render("login", context! {
+        logged_in: false
+    })
 }
 
 #[post("/login", data = "<login>")]
@@ -147,6 +149,8 @@ async fn settings_page(admin_user: AdminUser, flash: Option<FlashMessage<'_>>) -
     };
 
     Template::render("settings", context! {
+        logged_in: true,
+        admin: true,
         settings: settings,
         cloned: cloned,
         error: err,

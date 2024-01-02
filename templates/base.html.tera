@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% block head %}
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock title %} | Enigma CoLab</title>
+    {% endblock head %}
+    <style>
+        nav ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+        }
+        nav li {
+            display: inline;
+        }
+        nav a {
+            margin: 8px;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    {% block navbar %}
+    <ul>
+        <li><a href="/">Home</a></li>
+        {% if admin %}<li><a href="/settings">Settings</a></li>{% endif %}
+        <li>{% if not logged_in %}<a href="/login">Login</a>{% else %}<a href="/logout">Logout</a>{% endif %}</li>
+    </ol>
+    <br>
+    {% endblock navbar %}
+</nav>
+<div id="content">{% block content %}{% endblock content %}</div>
+</body>
+</html>

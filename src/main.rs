@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 mod routes;
 mod settings;
 mod repo;
+mod sessions;
 
 #[launch]
 fn rocket() -> _ {
