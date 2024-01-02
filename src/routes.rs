@@ -1,6 +1,5 @@
 use std::convert::Infallible;
 use std::env;
-use std::error::Error;
 
 use crypto::digest::Digest;
 use crypto::sha3::Sha3;
@@ -213,7 +212,7 @@ fn index(user: Option<User>, flash: Option<FlashMessage<'_>>) -> Template {
 }
 
 #[post("/clone")]
-async fn clone(admin: AdminUser) -> Flash<Redirect> {
+async fn clone_repo(admin: AdminUser) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(settings_page));
     if repo::is_cloned() {
         return Flash::error(redirect, "A repository already exists, can't clone");
@@ -234,9 +233,22 @@ fn fetch(admin: AdminUser) {
 fn pull(admin: AdminUser) {
 }
 
+#[get("/sessions/new")]
+fn new_session_page(admin_user: AdminUser) -> Template {
+    Template::render("new_session", context! {
+        logged_in: true,
+        admin: true
+    })
+}
+
+#[post("/sessions/new")]
+fn new_session_form(admin_user: AdminUser) -> Flash<Redirect> {
+    Flash::success(Redirect::to(uri!(index)), "New session created placeholder")
+}
+
 pub fn routes() -> Vec<Route> {
     routes![index,
         login, login_page, login_form, logout,
-        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect,
-        clone]
+        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect, clone_repo,
+        new_session_page, new_session_form]
 }

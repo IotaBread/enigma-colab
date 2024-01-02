@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::Path;
 use rocket::serde::{Deserialize, Serialize};
-use serde::de::Error;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Settings {
