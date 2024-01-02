@@ -12,6 +12,7 @@ pub struct Settings {
     pub pre_session_cmd: String,
     pub post_session_cmd: String,
     pub enigma_args: String,
+    pub enigma_main_class: String,
     pub classpath: String,
 }
 
@@ -26,6 +27,7 @@ impl Default for Settings {
             pre_session_cmd: "".to_string(),
             post_session_cmd: "".to_string(),
             enigma_args: "".to_string(),
+            enigma_main_class: "org.quiltmc.enigma.network.DedicatedEnigmaServer".to_string(),
             classpath: "".to_string(),
         }
     }
