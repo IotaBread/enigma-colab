@@ -211,12 +211,20 @@ fn settings_redirect() -> Redirect {
 }
 
 #[get("/")]
-fn index(user: Option<User>, flash: Option<FlashMessage<'_>>) -> Template {
+async fn index(user: Option<User>, flash: Option<FlashMessage<'_>>, sessions: SessionsState<'_>) -> Template {
+    let sessions = sessions.lock().await;
+    let running: Vec<&Session> = sessions.iter().filter(|s| s.end.is_none()).collect();
+    let recent: Vec<&Session> = sessions.iter().filter(|s| s.end.is_some()).collect();
+
     Template::render("index", context! {
         logged_in: user.is_some(),
         admin: user.filter(|v| {v.0 == env::var("SESSION_ID").unwrap_or_default()}).is_some(),
         msg: flash,
         cloned: repo::is_cloned(),
+        sessions: context! {
+            running,
+            recent
+        }
     })
 }
 

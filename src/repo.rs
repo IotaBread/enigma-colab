@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::process::Command;
 
-use git2::build::RepoBuilder;
 use git2::{BranchType, Repository};
+use git2::build::RepoBuilder;
 
 use crate::settings::read_settings;
 

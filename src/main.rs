@@ -4,6 +4,7 @@ use rocket::fairing::AdHoc;
 use rocket::State;
 use rocket::tokio::sync::Mutex;
 use rocket_dyn_templates::Template;
+
 use crate::sessions::Session;
 
 mod routes;
