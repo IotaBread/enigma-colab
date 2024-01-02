@@ -1,6 +1,10 @@
 {% extends "base" %}
 {% block title %}Login{% endblock title %}
 {% block content %}
+    {% if msg -%}
+        <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
+    {%- endif %}
+
     <form action="/login" method="POST" accept-charset="utf-8">
         <label for="user">username</label>
         <input type="text" name="user" id="user" value="" />

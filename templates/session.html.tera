@@ -1,0 +1,17 @@
+{% extends "base" %}
+{% block title %}Session{% endblock title %}
+{% block content %}
+    <h3>Session {{ session.id }}</h3>
+
+    {% if msg -%}
+        <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
+    {%- endif %}
+
+    <p>{{ session.start }}</p>
+    {% if session.end %}<p>{{ session.end }}</p>{% endif %}
+    {% if admin and not session.end %}
+    <form action="/sessions/{{ session.id }}/finish" method="POST">
+        <input type="submit" value="Finish session" />
+    </form>
+    {% endif %}
+{% endblock content %}

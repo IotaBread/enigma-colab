@@ -9,7 +9,7 @@
 
     <section>
         <h3>Current sessions</h3>
-        {% if admin %}<a href="/sessions/new">New session</a>{% endif %}
+        {% if admin and cloned %}<a href="/sessions/new">New session</a>{% endif %}
     </section>
     <section>
         <h3>Recent sessions</h3>

@@ -26,6 +26,10 @@ impl Display for StrError {
 impl Error for StrError {
 }
 
+fn pull_cmd() {
+    // TODO
+}
+
 pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
     let settings = read_settings().await?;
 
@@ -35,6 +39,7 @@ pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
         .clone(settings.repo.url.as_str(), Path::new("data/repo"))?;
 
     let rev = repo.revparse_single("HEAD")?.id();
+    pull_cmd();
     Ok((branch, rev.to_string()))
 }
 

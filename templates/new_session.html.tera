@@ -5,6 +5,7 @@
 
     <form action="/sessions/new" method="POST" accept-charset="utf-8">
         <label for="password">Password</label>
+        {# TODO: Empty passwords #}
         <input name="password" id="password" type="password" placeholder="Random password" />
         <input type="submit" value="Start" />
     </form>

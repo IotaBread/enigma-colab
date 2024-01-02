@@ -47,6 +47,7 @@ impl Session {
 
         let mut command = Command::new("java");
         command
+            .current_dir("data/repo/")
             .stdout(File::create(dir.join("stdout.log"))?)
             .stderr(File::create(dir.join("stderr.log"))?)
             .arg("-cp")
@@ -90,6 +91,36 @@ impl Session {
 
     fn dir_open<P: AsRef<Path>>(path: P) -> Result<Session, Box<dyn Error>> {
         Self::read(path.as_ref().join("session.toml"))
+    }
+
+    pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.end.is_some() {
+            return Ok(());
+        }
+
+        let file = Path::new("data/sessions/").join(self.id.to_string()).join("session.pid");
+
+        if file.as_path().exists() {
+            let pid = if self.pid.is_some() {
+                self.pid.unwrap().to_string()
+            } else {
+                fs::read_to_string(&file)?
+            };
+
+            fs::remove_file(file)?;
+
+            self.end = Some(Utc::now());
+            self.save()?;
+
+            Command::new("kill")
+                .arg(pid)
+                .status()?;
+
+            Ok(())
+        } else {
+            // TODO: shouldn't happen?
+            Ok(())
+        }
     }
 }
 
