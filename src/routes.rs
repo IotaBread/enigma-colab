@@ -133,14 +133,25 @@ fn logout(cookies: &CookieJar<'_>) -> Flash<Redirect> {
 async fn settings_page(admin_user: AdminUser, flash: Option<FlashMessage<'_>>) -> Template {
     let (settings, err) = match settings::read_settings().await {
         Ok(s) => (s, None),
-        Err(e) => (Settings::default(), Some(e))
+        Err(e) => (Settings::default(), Some(e.to_string()))
+    };
+
+    let cloned = repo::is_cloned();
+    let branches = if cloned {
+        Some(match repo::list_branches().await {
+            Ok(b) => b,
+            Err(_) => Vec::new(),
+        })
+    } else {
+        None
     };
 
     Template::render("settings", context! {
         settings: settings,
-        cloned: repo::is_cloned(),
-        error: err.map(|t| {t.to_string()}),
+        cloned: cloned,
+        error: err,
         msg: flash,
+        branches: branches,
     })
 }
 

@@ -21,11 +21,18 @@
         {%- endif %}
         <br>
         <label for="repo_branch">Repo Branch</label> {# TODO: list branches #}
+        {% if not branches or branches | length <= 1 %}
         <input name="branch" id="repo_branch" type="text" value="{{ settings.repo.branch }}" />
-        {#<button formaction="/checkout" formtarget="_blank">Checkout</button> {# TODO: if not current branch #}
+        {% else %}
+        <select name="branch" id="repo_branch">{% for branch in branches %}
+            <option selected="{{ settings.repo.branch == branch }}" value="{{ branch }}">{{ branch }}</option>
+        {% endfor %}</select>
+        {% endif %}
+        <button formaction="/checkout" formtarget="_blank" disabled>Checkout</button> {# TODO: if not current branch #}
         <br>
         <input type="submit" value="Save repo settings" />
     </form>
+    <br><br>
 
     <form action="/settings" method="POST" accept-charset="utf-8">
         <label for="jar_file">Jar File</label>
