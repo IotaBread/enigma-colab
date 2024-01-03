@@ -212,9 +212,18 @@ fn settings_redirect() -> Redirect {
 
 #[get("/")]
 async fn index(user: Option<User>, flash: Option<FlashMessage<'_>>, sessions: SessionsState<'_>) -> Template {
-    let sessions = sessions.lock().await;
-    let running: Vec<&Session> = sessions.iter().filter(|s| s.end.is_none()).collect();
-    let recent: Vec<&Session> = sessions.iter().filter(|s| s.end.is_some()).collect();
+    let mut sessions = sessions.lock().await;
+    let mut running = vec![];
+    let mut recent = vec![];
+
+    let mut iter = sessions.iter_mut();
+    while let Some(session) = iter.next() {
+        if session.check_is_running().expect("Failed to check the session status") {
+            running.push(session);
+        } else {
+            recent.push(session);
+        }
+    }
 
     Template::render("index", context! {
         logged_in: user.is_some(),
@@ -294,18 +303,16 @@ async fn session_page(id: Uuid, user: Option<User>, flash: Option<FlashMessage<'
 #[post("/sessions/<id>/finish")]
 async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsState<'_>) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(session_page(id)));
-
     let mut sessions = sessions.lock().await;
-    let session = match sessions.iter_mut().find(|s| s.id == id) {
-        Some(s) => s,
-        None => { return Flash::error(Redirect::to(uri!(index)), "Session not found") }
-    };
 
-    match session.stop() {
-        Ok(_) => { },
-        Err(e) => { return Flash::error(redirect, e.to_string()); }
-    };
-    Flash::success(redirect, "Session finished")
+    if let Some(session) = sessions.iter_mut().find(|s| s.id == id) {
+        match session.finish() {
+            Ok(_) => Flash::success(redirect, "Session finished"),
+            Err(e) => Flash::error(redirect, e.to_string())
+        }
+    } else {
+        Flash::error(Redirect::to(uri!(index)), "Session not found")
+    }
 }
 
 pub fn routes() -> Vec<Route> {

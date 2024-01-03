@@ -25,6 +25,7 @@ fn rocket() -> _ {
                 Ok(s) => s,
                 Err(_) => panic!("Failed to load the sessions"),
             };
+
             Ok(rocket.manage(SessionList::new(sessions)))
         }))
 }

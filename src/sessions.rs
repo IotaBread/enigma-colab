@@ -1,148 +1,189 @@
 use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::string::ToString;
 
 use chrono::{DateTime, Utc};
-use rocket::serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::settings::read_settings;
 
+const DIR: &str = "data/sessions";
+const PID_FILE: &str = "session.pid";
+
+type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Session {
     pub id: Uuid,
-    pub start: DateTime<Utc>,
-    pub end: Option<DateTime<Utc>>,
+    pub date: DateTime<Utc>,
+    password: Option<String>,
     #[serde(skip)]
-    pub(crate) password: Option<String>,
-    #[serde(skip)]
-    pub(crate) pid: Option<u32>,
+    pid: Option<u32>,
 }
 
 impl Session {
-    pub async fn new(password: Option<String>) -> Result<Session, Box<dyn Error>> {
-        let password = password.unwrap_or(random_password());
+    pub fn is_running(&self) -> bool {
+        self.pid.is_some()
+    }
 
+    pub fn check_is_running(&mut self) -> std::io::Result<bool> {
+        self.check_process()?;
+        Ok(self.is_running())
+    }
+
+    fn check_process(&mut self) -> std::io::Result<()> {
+        if let Some(pid) = self.pid {
+            let status = Command::new("kill")
+                .arg("-0")
+                .arg(pid.to_string())
+                .status()?;
+            if !status.success() {
+                self.invalidate_pid()?
+            }
+        }
+
+        Ok(())
+    }
+
+    fn invalidate_pid(&mut self) -> std::io::Result<()> {
+        self.pid = None;
+
+        fs::remove_file(self.get_file(PID_FILE))
+    }
+
+    fn get_dir(&self) -> PathBuf {
+        PathBuf::from(DIR).join(self.id.to_string())
+    }
+
+    fn get_file(&self, file: &str) -> PathBuf {
+        self.get_dir().join(file)
+    }
+
+    fn deserialize<P: AsRef<Path>>(path: P) -> Result<Session> {
+        let toml_str = fs::read_to_string(path)?;
+        let s = toml::from_str(toml_str.as_str())?;
+        Ok(s)
+    }
+
+    fn read_pid<P: AsRef<Path>>(path: P) -> Result<Option<u32>> {
+        Ok(if path.as_ref().exists() {
+            Some(fs::read_to_string(path)?.parse()?)
+        } else {
+            None
+        })
+    }
+
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<Session> {
+        let path = path.as_ref();
+        let mut session = Self::deserialize(path.join("session.toml"))?;
+        session.pid = Self::read_pid(path.join(PID_FILE))?;
+
+        Ok(session)
+    }
+
+    fn write_pid<P: AsRef<Path>>(path: P, pid: u32) -> std::io::Result<()> {
+        fs::write(path, pid.to_string())
+    }
+
+    fn serialize<P: AsRef<Path>>(path: P, session: &Session) -> Result<()> {
+        let toml_str = toml::to_string(session)?;
+        fs::write(path, toml_str)?;
+
+        Ok(())
+    }
+
+    fn write(&self) -> Result<()> {
+        Self::serialize(self.get_file("session.toml"), &self)
+    }
+
+    pub async fn new(password: Option<String>) -> Result<Session> {
         let mut session = Session {
             id: Uuid::new_v4(),
-            start: Utc::now(),
-            end: None,
-            password: Some(password),
+            date: Utc::now(),
+            password,
             pid: None,
         };
 
-        session.save()?;
         session.launch().await?;
 
         Ok(session)
     }
 
-    async fn launch(&mut self) -> Result<(), Box<dyn Error>> {
-        let dir = Path::new("data/sessions/").join(self.id.to_string());
+    async fn launch(&mut self) -> Result<()> {
+        let dir = self.get_dir();
         fs::create_dir_all(&dir)?;
 
         let settings = read_settings().await?;
 
+        let stdout = File::create(dir.join("stdout.log"))?;
+        let stderr = File::create(dir.join("stderr.log"))?;
         let mut command = Command::new("java");
+
         command
             .current_dir("data/repo/")
-            .stdout(File::create(dir.join("stdout.log"))?)
-            .stderr(File::create(dir.join("stderr.log"))?)
+            .stdout(stdout)
+            .stderr(stderr)
             .arg("-cp")
             .arg(settings.classpath)
             .arg(settings.enigma_main_class)
             .arg("-jar")
             .arg(settings.jar_file)
             .arg("-mappings")
-            .arg(settings.mappings_file)
-            .arg("-password")
-            .arg(match &self.password {
-                Some(p) => p,
-                None => ""
-            });
+            .arg(settings.mappings_file);
+
+        if let Some(password) = &self.password {
+            command.arg("-password")
+                .arg(password);
+        }
 
         for arg in settings.enigma_args.split(" ") {
             command.arg(arg);
         }
 
         let pid = command.spawn()?.id();
-        fs::write(dir.join("session.pid"), pid.to_string())?;
-
+        Session::write_pid(dir.join(PID_FILE), pid)?;
         self.pid = Some(pid);
+
         Ok(())
     }
 
-    fn save(&self) -> Result<(), Box<dyn Error>> {
-        let dir = Path::new("data/sessions/").join(self.id.to_string());
-        fs::create_dir_all(&dir)?;
+    pub fn finish(&mut self) -> Result<()> {
+        if !self.check_is_running()? {
+            return Ok(())
+        }
 
-        let data_file = dir.join("session.toml");
-        fs::write(data_file, toml::to_string(&self)?)?;
+        let pid = self.pid.unwrap();
+
+        Command::new("kill")
+            .arg(pid.to_string())
+            .status()?;
+
+        self.invalidate_pid()?;
+        self.write()?;
+
         Ok(())
     }
-
-    fn read<P: AsRef<Path>>(path: P) -> Result<Session, Box<dyn Error>> {
-        let toml_str = fs::read_to_string(path)?;
-        let s = toml::from_str(toml_str.as_str())?;
-        Ok(s)
-    }
-
-    fn dir_open<P: AsRef<Path>>(path: P) -> Result<Session, Box<dyn Error>> {
-        Self::read(path.as_ref().join("session.toml"))
-    }
-
-    pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
-        if self.end.is_some() {
-            return Ok(());
-        }
-
-        let file = Path::new("data/sessions/").join(self.id.to_string()).join("session.pid");
-
-        if file.as_path().exists() {
-            let pid = if self.pid.is_some() {
-                self.pid.unwrap().to_string()
-            } else {
-                fs::read_to_string(&file)?
-            };
-
-            fs::remove_file(file)?;
-
-            self.end = Some(Utc::now());
-            self.save()?;
-
-            Command::new("kill")
-                .arg(pid)
-                .status()?;
-
-            Ok(())
-        } else {
-            // TODO: shouldn't happen?
-            Ok(())
-        }
-    }
 }
 
-fn random_password() -> String {
-    String::from("Placeholder")
-}
-
-pub fn load_sessions() -> Result<Vec<Session>, Box<dyn Error>> {
-    let sessions_dir = Path::new("data/sessions/");
-    if !sessions_dir.exists() {
-        return Ok(vec![]);
-    }
-
-    let paths = fs::read_dir(sessions_dir)?;
+pub fn load_sessions() -> Result<Vec<Session>> {
     let mut sessions = vec![];
+    let dir = Path::new(DIR);
 
-    for entry in paths {
-        let dir = entry?;
-        let file_type = dir.file_type()?;
-        if file_type.is_dir() {
-            let session = Session::dir_open(dir.path())?;
-            sessions.push(session);
+    if dir.exists() {
+        let entries = fs::read_dir(dir)?;
+
+        for entry in entries {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+
+            if file_type.is_dir() {
+                let session = Session::read(entry.path())?;
+                sessions.push(session);
+            }
         }
     }
 
