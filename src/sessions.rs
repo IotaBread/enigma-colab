@@ -109,6 +109,7 @@ impl Session {
         };
 
         session.launch().await?;
+        session.write()?;
 
         Ok(session)
     }
