@@ -143,7 +143,7 @@ fn logout(cookies: &CookieJar<'_>) -> Flash<Redirect> {
 async fn settings_page(_admin_user: AdminUser, flash: Option<FlashMessage<'_>>) -> Template {
     let (settings, err) = match settings::read_settings().await {
         Ok(s) => (s, None),
-        Err(e) => (Settings::default(), Some(e.to_string()))
+        Err(e) => (Settings::default(), Some(format!("Failed to read settings: {e}")))
     };
 
     let cloned = repo::is_cloned();
@@ -172,7 +172,7 @@ async fn edit_settings<T: FnOnce(&mut Settings)>(redirect: Redirect, t: T) -> Fl
         Ok(s) => s,
         Err(e) => {
             println!("{}", e);
-            return Flash::error(redirect, e.to_string())
+            return Flash::error(redirect, format!("Failed to read settings: {e}"))
         }
     };
 
@@ -182,7 +182,7 @@ async fn edit_settings<T: FnOnce(&mut Settings)>(redirect: Redirect, t: T) -> Fl
         Ok(_) => Flash::success(redirect, "Settings updated"),
         Err(e) => {
             println!("{}", e);
-            Flash::error(redirect, e.to_string())
+            Flash::error(redirect, format!("Failed to write settings: {e}"))
         }
     }
 }
@@ -248,7 +248,7 @@ async fn clone_repo(_admin: AdminUser) -> Flash<Redirect> {
     match repo::clone().await {
         Ok((branch, rev)) =>
             Flash::success(redirect, format!("Cloned repo, with branch '{branch}' at {rev}")),
-        Err(e) => Flash::error(redirect, e.to_string())
+        Err(e) => Flash::error(redirect, format!("Failed to clone repo: {e}"))
     }
 }
 
@@ -257,7 +257,7 @@ async fn fetch(_admin_user: AdminUser) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(settings_page));
     match repo::fetch() {
         Ok(_) => Flash::success(redirect, "Fetched remote"),
-        Err(e) => Flash::error(redirect, e.to_string())
+        Err(e) => Flash::error(redirect, format!("Failed to fetch repo: {e}"))
     }
 }
 
@@ -280,7 +280,7 @@ async fn new_session_form(_admin_user: AdminUser, sessions: SessionsState<'_>, d
     let mut sessions = sessions.lock().await;
     let session = match Session::new(Some(data.password.to_string())).await {
         Ok(s) => s,
-        Err(e) => { return Flash::error(error_redirect, e.to_string()); },
+        Err(e) => { return Flash::error(error_redirect, format!("Failed to start session: {e}")); },
     };
     let redirect = Redirect::to(uri!(session_page(session.id)));
     sessions.push(session);
@@ -333,7 +333,7 @@ async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsStat
     if let Some(session) = sessions.iter_mut().find(|s| s.id == id) {
         match session.finish().await {
             Ok(_) => Flash::success(redirect, "Session finished"),
-            Err(e) => Flash::error(redirect, e.to_string())
+            Err(e) => Flash::error(redirect, format!("Failed to end session: {e}"))
         }
     } else {
         Flash::error(Redirect::to(uri!(index)), "Session not found")
