@@ -8,7 +8,7 @@ pub struct Settings {
     pub repo: RepoSettings,
     pub jar_file: String,
     pub mappings_file: String,
-    pub auto_save_interval: u16,
+    pub auto_save_interval: u16, // TODO
     pub pull_cmd: String,
     pub pre_session_cmd: String,
     pub post_session_cmd: String,

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use git2::{BranchType, Repository};
 use git2::build::RepoBuilder;
@@ -69,4 +69,62 @@ pub fn fetch() -> Result<(), Box<dyn Error>> {
     status.success()
         .then_some(())
         .ok_or(Box::from(StrError::new("fetching failed")))
+}
+
+pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
+    let settings = read_settings().await?;
+
+    // Stage changes
+    Command::new("git")
+        .current_dir("data/repo")
+        .arg("add")
+        .arg(settings.mappings_file)
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    // Create the patch
+    let diff = Command::new("git")
+        .current_dir("data/repo")
+        .arg("diff")
+        .arg("--cached")
+        .stderr(Stdio::inherit())
+        .output()?;
+
+    if !diff.status.success() {
+        Ok(vec![])
+    } else {
+        Ok(diff.stdout)
+    }
+}
+
+pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
+    let settings = read_settings().await?;
+
+    // Remove staged and working dir changes
+    let reset = Command::new("git")
+        .current_dir("data/repo")
+        .arg("reset")
+        .arg("--hard")
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    if !reset.success() {
+        return Err(Box::from(StrError(format!("git reset failed with code {code}", code = reset.code().unwrap_or(-1)))));
+    }
+
+    // Remove any untracked files
+    let clean = Command::new("git")
+        .current_dir("data/repo")
+        .arg("clean")
+        .arg("-f") // Force, refuses to delete files by default
+        .arg("-d") // Recurse
+        .arg(settings.mappings_file)
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    if !clean.success() {
+        return Err(Box::from(StrError(format!("git clean failed with code {code}", code = reset.code().unwrap_or(-1)))));
+    }
+
+    Ok(())
 }

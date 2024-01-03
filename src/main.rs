@@ -23,7 +23,7 @@ fn rocket() -> _ {
         .attach(AdHoc::try_on_ignite("Sessions", |rocket| async {
             let sessions = match sessions::load_sessions() {
                 Ok(s) => s,
-                Err(_) => panic!("Failed to load the sessions"),
+                Err(e) => panic!("Failed to load the sessions: {e}"),
             };
 
             Ok(rocket.manage(SessionList::new(sessions)))

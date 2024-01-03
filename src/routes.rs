@@ -300,6 +300,12 @@ async fn session_page(id: Uuid, user: Option<User>, flash: Option<FlashMessage<'
     }))
 }
 
+#[get("/sessions/<id>/events")]
+async fn session_events(id: Uuid, _admin_user: AdminUser) -> Redirect {
+    // TODO
+    Redirect::to(uri!(session_page(id)))
+}
+
 #[post("/sessions/<id>/finish")]
 async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsState<'_>) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(session_page(id)));
@@ -319,5 +325,5 @@ pub fn routes() -> Vec<Route> {
     routes![index,
         login, login_page, login_form, logout,
         settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect, clone_repo,
-        fetch, new_session_page, new_session_form, session_page, finish_session]
+        fetch, new_session_page, new_session_form, session_page, session_events, finish_session]
 }
