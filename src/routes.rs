@@ -54,7 +54,7 @@ impl<'r> FromRequest<'r> for AdminUser {
     type Error = Infallible;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let id = env::var("SESSION_ID");
+        let id = env::var("ADMIN_SESSION_ID");
 
         if id.is_ok() {
             request.cookies()
@@ -120,7 +120,7 @@ fn login_form(cookies: &CookieJar<'_>, login: Form<Login<'_>>) -> Flash<Redirect
     let password = env::var("PASSWORD_HASH");
     if user.is_ok() && password.is_ok() {
         if login.user == user.unwrap() && hash_password(&login.password) == password.unwrap() {
-            let id = env::var("SESSION_ID");
+            let id = env::var("ADMIN_SESSION_ID");
             if id.is_ok() {
                 cookies.add_private(("session", id.unwrap()));
             }
@@ -227,7 +227,7 @@ async fn index(user: Option<User>, flash: Option<FlashMessage<'_>>, sessions: Se
 
     Template::render("index", context! {
         logged_in: user.is_some(),
-        admin: user.filter(|v| {v.0 == env::var("SESSION_ID").unwrap_or_default()}).is_some(),
+        admin: user.filter(|v| {v.0 == env::var("ADMIN_SESSION_ID").unwrap_or_default()}).is_some(),
         msg: flash,
         cloned: repo::is_cloned(),
         sessions: context! {
@@ -294,7 +294,7 @@ async fn session_page(id: Uuid, user: Option<User>, flash: Option<FlashMessage<'
 
     Some(Template::render("session", context! {
         logged_in: user.is_some(),
-        admin: user.filter(|v| {v.0 == env::var("SESSION_ID").unwrap_or_default()}).is_some(),
+        admin: user.filter(|v| {v.0 == env::var("ADMIN_SESSION_ID").unwrap_or_default()}).is_some(),
         msg: flash,
         session: session
     }))

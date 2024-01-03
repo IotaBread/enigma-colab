@@ -6,7 +6,7 @@ use std::process::Command;
 use std::string::ToString;
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::settings::read_settings;
@@ -21,7 +21,7 @@ pub struct Session {
     pub id: Uuid,
     pub date: DateTime<Utc>,
     password: Option<String>,
-    #[serde(skip)]
+    #[serde(skip_deserializing, rename(serialize = "running"), serialize_with = "serialize_running")]
     pid: Option<u32>,
 }
 
@@ -188,4 +188,8 @@ pub fn load_sessions() -> Result<Vec<Session>> {
     }
 
     Ok(sessions)
+}
+
+pub fn serialize_running<S>(value: &Option<u32>, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: Serializer {
+    serializer.serialize_bool(value.is_some())
 }
