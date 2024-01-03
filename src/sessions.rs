@@ -126,6 +126,8 @@ impl Session {
 
         let settings = read_settings().await?;
 
+        repo::run_command(&settings.pre_session_cmd)?;
+
         let stdout = File::create(dir.join("stdout.log"))?;
         let stderr = File::create(dir.join("stderr.log"))?;
         let mut command = Command::new("java");
@@ -175,6 +177,8 @@ impl Session {
         let patch = repo::create_patch().await?;
         repo::clear_working_tree().await?;
         fs::write(self.get_file(PATCH_FILE), patch)?;
+
+        repo::run_command(&read_settings().await?.post_session_cmd)?;
 
         Ok(())
     }

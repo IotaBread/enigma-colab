@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 
 use git2::{BranchType, Repository};
 use git2::build::RepoBuilder;
@@ -26,8 +26,16 @@ impl Display for StrError {
 impl Error for StrError {
 }
 
-fn pull_cmd() {
-    // TODO
+pub fn run_command(command: &String) -> std::io::Result<Option<ExitStatus>> {
+    Ok(if !command.is_empty() {
+        Some(Command::new("sh")
+            .current_dir("data/repo")
+            .arg("-c")
+            .arg(command)
+            .status()?)
+    } else {
+        None
+    })
 }
 
 pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
@@ -38,8 +46,9 @@ pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
         .branch(branch.as_str())
         .clone(settings.repo.url.as_str(), Path::new("data/repo"))?;
 
+    run_command(&settings.pull_cmd)?;
+
     let rev = repo.revparse_single("HEAD")?.id();
-    pull_cmd();
     Ok((branch, rev.to_string()))
 }
 
