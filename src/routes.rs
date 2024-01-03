@@ -101,7 +101,7 @@ fn hash_password(password: &str) -> String {
 }
 
 #[get("/login")]
-fn login(user: User) -> Redirect {
+fn login(_user: User) -> Redirect {
     Redirect::to(uri!(index))
 }
 
@@ -251,10 +251,6 @@ async fn fetch(_admin_user: AdminUser) -> Flash<Redirect> {
     }
 }
 
-#[post("/pull")]
-fn pull(admin: AdminUser) {
-}
-
 #[get("/sessions/new")]
 fn new_session_page(_admin_user: AdminUser) -> Template {
     Template::render("new_session", context! {
@@ -300,7 +296,7 @@ async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsStat
     let redirect = Redirect::to(uri!(session_page(id)));
 
     let mut sessions = sessions.lock().await;
-    let mut session = match sessions.iter_mut().find(|s| s.id == id) {
+    let session = match sessions.iter_mut().find(|s| s.id == id) {
         Some(s) => s,
         None => { return Flash::error(Redirect::to(uri!(index)), "Session not found") }
     };
