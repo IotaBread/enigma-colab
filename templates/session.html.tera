@@ -13,4 +13,7 @@
         <input type="submit" value="Finish session" />
     </form>
     {% endif %}
+    {% if not session.running %}
+        <a href="/sessions/{{ session.id }}/patch">Patch</a>
+    {% endif %}
 {% endblock content %}

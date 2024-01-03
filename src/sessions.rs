@@ -8,11 +8,13 @@ use std::string::ToString;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
+use crate::repo;
 
 use crate::settings::read_settings;
 
 const DIR: &str = "data/sessions";
 const PID_FILE: &str = "session.pid";
+const PATCH_FILE: &str = "session.patch";
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -61,6 +63,10 @@ impl Session {
 
     fn get_file(&self, file: &str) -> PathBuf {
         self.get_dir().join(file)
+    }
+
+    pub fn get_patch_file(&self) -> PathBuf {
+        self.get_file(PATCH_FILE)
     }
 
     fn deserialize<P: AsRef<Path>>(path: P) -> Result<Session> {
@@ -152,7 +158,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn finish(&mut self) -> Result<()> {
+    pub async fn finish(&mut self) -> Result<()> {
         if !self.check_is_running()? {
             return Ok(())
         }
@@ -165,6 +171,10 @@ impl Session {
 
         self.invalidate_pid()?;
         self.write()?;
+
+        let patch = repo::create_patch().await?;
+        repo::clear_working_tree().await?;
+        fs::write(self.get_file(PATCH_FILE), patch)?;
 
         Ok(())
     }

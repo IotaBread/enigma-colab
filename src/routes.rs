@@ -5,6 +5,7 @@ use crypto::digest::Digest;
 use crypto::sha3::Sha3;
 use rocket::{Request, Route};
 use rocket::form::Form;
+use rocket::fs::NamedFile;
 use rocket::http::{CookieJar, Status};
 use rocket::outcome::IntoOutcome;
 use rocket::outcome::Outcome::Forward;
@@ -300,6 +301,24 @@ async fn session_page(id: Uuid, user: Option<User>, flash: Option<FlashMessage<'
     }))
 }
 
+#[get("/sessions/<id>/patch")]
+async fn session_patch(id: Uuid, sessions: SessionsState<'_>) -> Option<NamedFile> {
+    let sessions = sessions.lock().await;
+    let session = sessions.iter().find(|s| s.id == id)?;
+
+    let file_path = session.get_patch_file();
+    let file_path = file_path.as_path();
+    if file_path.exists() {
+        if let Ok(file) = NamedFile::open(file_path).await {
+            Some(file)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 #[get("/sessions/<id>/events")]
 async fn session_events(id: Uuid, _admin_user: AdminUser) -> Redirect {
     // TODO
@@ -312,7 +331,7 @@ async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsStat
     let mut sessions = sessions.lock().await;
 
     if let Some(session) = sessions.iter_mut().find(|s| s.id == id) {
-        match session.finish() {
+        match session.finish().await {
             Ok(_) => Flash::success(redirect, "Session finished"),
             Err(e) => Flash::error(redirect, e.to_string())
         }
@@ -324,6 +343,6 @@ async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsStat
 pub fn routes() -> Vec<Route> {
     routes![index,
         login, login_page, login_form, logout,
-        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect, clone_repo,
-        fetch, new_session_page, new_session_form, session_page, session_events, finish_session]
+        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect, clone_repo, fetch,
+        new_session_page, new_session_form, session_page, session_patch, session_events, finish_session]
 }
