@@ -261,6 +261,19 @@ async fn fetch(_admin_user: AdminUser) -> Flash<Redirect> {
     }
 }
 
+#[post("/pull")]
+async fn pull(_admin_user: AdminUser) -> Flash<Redirect> {
+    let redirect = Redirect::to(uri!(settings_page));
+
+    match repo::pull() {
+        Ok(res) => { match res {
+            Ok(rev) => Flash::success(redirect, format!("Pulled remote: HEAD is now at {rev}")),
+            Err(msg) => Flash::success(redirect, format!("Not updated: {msg}"))
+        } },
+        Err(e) => Flash::error(redirect, format!("Failed to pull from repo: {e}"))
+    }
+}
+
 #[get("/sessions/new")]
 fn new_session_page(_admin_user: AdminUser) -> Template {
     Template::render("new_session", context! {
@@ -343,6 +356,7 @@ async fn finish_session(id: Uuid, _admin_user: AdminUser, sessions: SessionsStat
 pub fn routes() -> Vec<Route> {
     routes![index,
         login, login_page, login_form, logout,
-        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect, clone_repo, fetch,
+        settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect,
+        clone_repo, fetch, pull,
         new_session_page, new_session_form, session_page, session_patch, session_events, finish_session]
 }

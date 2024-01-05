@@ -11,9 +11,10 @@
     <form action="/settings/repo" method="POST" accept-charset="utf-8">
         <label for="repo_url">Repo URL</label>
         <input name="url" id="repo_url" type="text" value="{{ settings.repo.url }}" {% if cloned %}readonly {% endif %}/>
-        <button formaction="/clone" {%- if cloned %}disabled{% endif %}>Clone</button>{% if cloned %}
-        <button formaction="/fetch" formtarget="_blank" form="">Fetch</button>
-        <button formaction="/pull" formtarget="_blank" form="">Pull</button>
+        <button formaction="/clone" {%- if cloned %}disabled{% endif %}>Clone</button>
+        {% if cloned %}
+            <button formaction="/fetch">Fetch</button>
+            <button formaction="/pull">Pull</button>
         {%- endif %}
         <br>
         <label for="repo_branch">Repo Branch</label> {# TODO: list branches #}
