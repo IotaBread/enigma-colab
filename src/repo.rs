@@ -118,13 +118,19 @@ pub fn pull() -> Result<String, Box<dyn Error>> {
     let mut head_ref = repo.head()?;
 
     if let Some(current_branch) = head_ref.shorthand() {
-        let remote_name = repo.branch_upstream_remote(current_branch)?;
+        let branch = repo.find_branch(current_branch, BranchType::Local)?;
+        // current_branch is the simple name, we need it's full name (i.e. refs/heads/branch)
+        let branch_ref = match branch.get().name() {
+            Some(s) => s,
+            None => { err!("Branch ref has an invalid name"); }
+        };
+
+        let remote_name = repo.branch_upstream_remote(branch_ref)?;
         let remote_name = remote_name.as_str().unwrap_or("<unknown remote>");
         let mut remote = repo.find_remote(remote_name)?;
 
         remote.fetch::<&str>(&[], None, None)?;
 
-        let branch = repo.find_branch(current_branch, BranchType::Local)?;
         let remote_branch = branch.upstream()?;
         let merge_target = repo.reference_to_annotated_commit(remote_branch.get())?;
 
