@@ -22,6 +22,8 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 pub struct Session {
     pub id: Uuid,
     pub date: DateTime<Utc>,
+    #[serde(default = "default_rev")]
+    pub rev: String,
     password: Option<String>, // TODO: Serialize only when writing the session.toml file
     // Serialize as `running: bool` for use in the html templates
     #[serde(skip_deserializing, rename(serialize = "running"), serialize_with = "serialize_running")]
@@ -111,6 +113,7 @@ impl Session {
         let mut session = Session {
             id: Uuid::new_v4(),
             date: Utc::now(),
+            rev: repo::get_head()?,
             password,
             pid: None,
         };
@@ -183,6 +186,10 @@ impl Session {
 
         Ok(())
     }
+}
+
+fn default_rev() -> String {
+    "unknown HEAD revision".to_string()
 }
 
 pub fn load_sessions() -> Result<Vec<Session>> {

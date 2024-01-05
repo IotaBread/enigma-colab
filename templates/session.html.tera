@@ -7,7 +7,7 @@
         <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
     {%- endif %}
 
-    <p>{{ session.date }}</p>
+    <p>{{ session.date }} at {{ session.rev }}</p>
     {% if admin and session.running %}
     <form action="/sessions/{{ session.id }}/finish" method="POST">
         <input type="submit" value="Finish session" />

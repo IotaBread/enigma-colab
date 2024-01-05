@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 
-use git2::{BranchType, FetchOptions, ObjectType, Repository};
+use git2::{BranchType, FetchOptions, ObjectType, Oid, Repository};
 use git2::build::{CheckoutBuilder, RepoBuilder};
 
 use crate::settings::read_settings;
@@ -215,4 +215,11 @@ pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+pub fn get_head() -> Git2Result<String> {
+    let repo = open_repo()?;
+    let direct_head = repo.head()?.resolve()?;
+    let target = direct_head.target().unwrap_or(Oid::zero()); // Safe to unwrap, only None if the reference isn't direct
+    Ok(target.to_string())
 }

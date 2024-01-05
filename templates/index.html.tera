@@ -13,13 +13,13 @@
         <h3>Current sessions</h3>
         {% if admin and cloned and sessions.running | length < 1 %}<a href="/sessions/new">New session</a><br>{% endif %}
         {% for session in sessions.running %}
-            <a href="/sessions/{{ session.id }}">{{ session.id }} {{ session.date }}</a><br>
+            <a href="/sessions/{{ session.id }}">{{ session.id }} {{ session.date }}</a> at {{ session.rev }}<br>
         {% endfor %}
     </section>
     <section>
         <h3>Recent sessions</h3>
         {% for session in sessions.recent %}
-            <a href="/sessions/{{ session.id }}">{{ session.id }} {{ session.date }}</a><br>
+            <a href="/sessions/{{ session.id }}">{{ session.id }} {{ session.date }}</a> at {{ session.rev }}<br>
         {% endfor %}
     </section>
 {% endblock content %}
