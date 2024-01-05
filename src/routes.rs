@@ -148,7 +148,7 @@ async fn settings_page(_admin_user: AdminUser, flash: Option<FlashMessage<'_>>) 
 
     let cloned = repo::is_cloned();
     let branches = if cloned {
-        Some(match repo::list_branches().await {
+        Some(match repo::list_local_branches().await {
             Ok(b) => b,
             Err(_) => Vec::new(),
         })
