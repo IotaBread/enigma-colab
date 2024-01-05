@@ -46,6 +46,7 @@ pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
         .branch(branch.as_str())
         .clone(settings.repo.url.as_str(), Path::new("data/repo"))?;
 
+    // TODO: Run on another thread
     run_command(&settings.pull_cmd)?;
 
     let rev = repo.revparse_single("HEAD")?.id();

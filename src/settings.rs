@@ -15,6 +15,7 @@ pub struct Settings {
     pub enigma_args: String,
     pub enigma_main_class: String,
     pub classpath: String,
+    // TODO: Save last password
 }
 
 impl Default for Settings {

@@ -22,7 +22,8 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 pub struct Session {
     pub id: Uuid,
     pub date: DateTime<Utc>,
-    password: Option<String>,
+    password: Option<String>, // TODO: Serialize only when writing the session.toml file
+    // Serialize as `running: bool` for use in the html templates
     #[serde(skip_deserializing, rename(serialize = "running"), serialize_with = "serialize_running")]
     pid: Option<u32>,
 }

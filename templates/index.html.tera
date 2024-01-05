@@ -3,6 +3,8 @@
 {% block content %}
     <h2>Enigma CoLab</h2>
 
+    <a href="https://github.com/IotaBread/enigma-colab#enigma-colab">About</a>
+
     {% if msg -%}
         <p>{#{% if msg.kind %}{{ msg.kind }}: {% endif %}#}{{ msg.message }}</p>
     {%- endif %}
