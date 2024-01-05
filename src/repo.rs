@@ -15,12 +15,6 @@ type Git2Result<T> = Result<T, git2::Error>;
 #[derive(Debug)]
 struct StrError(String);
 
-impl StrError {
-    fn new(msg: &str) -> Self {
-        StrError(msg.to_string())
-    }
-}
-
 impl Display for StrError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -28,6 +22,15 @@ impl Display for StrError {
 }
 
 impl Error for StrError {
+}
+
+macro_rules! err {
+    ($val:literal) => {
+        return Err(Box::from(StrError($val.to_string())))
+    };
+    ($($arg:tt)*) => {
+        return Err(Box::from(StrError(format!($($arg)*))))
+    }
 }
 
 pub fn run_command(command: &String) -> std::io::Result<Option<ExitStatus>> {
@@ -86,14 +89,15 @@ pub fn fetch() -> Git2Result<()> {
 /// Based on libgit2's [example fetch.c](https://libgit2.org/libgit2/ex/v1.7.1/fetch.html)
 pub fn fetch_repo(repo: Repository) -> Git2Result<()> {
     let mut options = FetchOptions::new(); // TODO: Progress message
-    let mut remotes_iter = repo.remotes()?.iter();
+    let remotes = repo.remotes()?;
+    let mut remotes_iter = remotes.iter();
 
     while let Some(Some(remote_name)) = remotes_iter.next() {
         println!("Fetching {}", remote_name); // TODO: Custom feedback function
         let mut remote = repo.find_remote(remote_name)?;
 
         // No refspecs to use the base ones
-        remote.fetch(&[], Some(&mut options), None)?;
+        remote.fetch::<&str>(&[], Some(&mut options), None)?;
 
         let stats = remote.stats();
         if stats.local_objects() > 0 {
@@ -109,7 +113,7 @@ pub fn fetch_repo(repo: Repository) -> Git2Result<()> {
 }
 
 /// Based on libgit2's [example merge.c](https://libgit2.org/libgit2/ex/v1.7.1/merge.html)
-pub fn pull() -> Git2Result<()> {
+pub fn pull() -> Result<String, Box<dyn Error>> {
     let repo = open_repo()?;
     let mut head_ref = repo.head()?;
 
@@ -118,10 +122,9 @@ pub fn pull() -> Git2Result<()> {
         let remote_name = remote_name.as_str().unwrap_or("<unknown remote>");
         let mut remote = repo.find_remote(remote_name)?;
 
-        remote.fetch(&[], None, None)?;
+        remote.fetch::<&str>(&[], None, None)?;
 
         let branch = repo.find_branch(current_branch, BranchType::Local)?;
-        assert_eq!(&head_ref, branch.get());
         let remote_branch = branch.upstream()?;
         let merge_target = repo.reference_to_annotated_commit(remote_branch.get())?;
 
@@ -134,22 +137,22 @@ pub fn pull() -> Git2Result<()> {
             let target_oid = merge_target.id();
             let target = repo.find_object(target_oid, Some(ObjectType::Commit))?;
 
-            let options = CheckoutBuilder::new().safe();
-            repo.checkout_tree(&target, Some(options))?;
+            let mut options = CheckoutBuilder::new();
+            repo.checkout_tree(&target, Some(options.safe()))?;
 
             let remote_branch_name = remote_branch.name()?.unwrap_or("<unknown branch>");
             let reflog_msg = format!("pull {} {}: Fast-forward", remote_name, remote_branch_name);
             head_ref.set_target(target_oid, reflog_msg.as_str())?;
 
-            return Ok(())
+            return Ok(target_oid.to_string());
         } else if analysis.is_normal() {
-            eprintln!("Merge required, please resolve it manually")
+            err!("Merge required, please resolve it manually")
         }
     } else {
-        eprintln!("Not currently on a branch")
+        err!("Not currently on a branch")
     }
 
-    Ok(())
+    Ok("HEAD".to_string())
 }
 
 pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
@@ -190,7 +193,7 @@ pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
         .status()?;
 
     if !reset.success() {
-        return Err(Box::from(StrError(format!("git reset failed with code {code}", code = reset.code().unwrap_or(-1)))));
+        err!("git reset failed with code {code}", code = reset.code().unwrap_or(-1));
     }
 
     // Remove any untracked files
@@ -204,7 +207,7 @@ pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
         .status()?;
 
     if !clean.success() {
-        return Err(Box::from(StrError(format!("git clean failed with code {code}", code = reset.code().unwrap_or(-1)))));
+        err!("git clean failed with code {code}", code = reset.code().unwrap_or(-1));
     }
 
     Ok(())
