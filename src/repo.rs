@@ -113,7 +113,7 @@ pub fn fetch_repo(repo: Repository) -> Git2Result<()> {
 }
 
 /// Based on libgit2's [example merge.c](https://libgit2.org/libgit2/ex/v1.7.1/merge.html)
-pub fn pull() -> Result<String, Box<dyn Error>> {
+pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     let repo = open_repo()?;
     let mut head_ref = repo.head()?;
 
@@ -137,9 +137,9 @@ pub fn pull() -> Result<String, Box<dyn Error>> {
         let (analysis, preference) = repo.merge_analysis(&[&merge_target])?;
 
         if analysis.is_up_to_date() {
-            println!("Already up to date");
+            return Ok(Err("Already up to date".to_string()));
         } else if analysis.is_fast_forward() && !preference.is_no_fast_forward() {
-            println!("Fast-forward");
+            // println!("Fast-forward");
             let target_oid = merge_target.id();
             let target = repo.find_object(target_oid, Some(ObjectType::Commit))?;
 
@@ -150,15 +150,13 @@ pub fn pull() -> Result<String, Box<dyn Error>> {
             let reflog_msg = format!("pull {} {}: Fast-forward", remote_name, remote_branch_name);
             head_ref.set_target(target_oid, reflog_msg.as_str())?;
 
-            return Ok(target_oid.to_string());
+            return Ok(Ok(target_oid.to_string()));
         } else if analysis.is_normal() {
             err!("Merge required, please resolve it manually")
         }
-    } else {
-        err!("Not currently on a branch")
     }
 
-    Ok("HEAD".to_string())
+    err!("Not currently on a branch")
 }
 
 pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
