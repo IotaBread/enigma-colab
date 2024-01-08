@@ -11,6 +11,7 @@ mod routes;
 mod settings;
 mod repo;
 mod sessions;
+mod util;
 
 type SessionList = Mutex<Vec<Session>>;
 type SessionsState<'r> = &'r State<SessionList>;

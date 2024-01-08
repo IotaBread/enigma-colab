@@ -10,7 +10,7 @@ In no particular order
 - [ ] UI
 - [ ] Session access sharing
 - [ ] Show info to join a session (i.e. address, port, password)
-- [ ] Show HEAD commit for sessions
+- [x] Show HEAD commit for sessions
 - [ ] Show jar info for sessions
 - [ ] Auto saving
 - [ ] CSS!

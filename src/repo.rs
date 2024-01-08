@@ -8,7 +8,7 @@ use git2::build::{CheckoutBuilder, RepoBuilder};
 
 use crate::settings::read_settings;
 
-const DIR: &str = "data/repo";
+pub const DIR: &str = "data/repo";
 
 type Git2Result<T> = Result<T, git2::Error>;
 

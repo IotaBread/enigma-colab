@@ -8,9 +8,9 @@ use std::string::ToString;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
-use crate::repo;
 
-use crate::settings::read_settings;
+use crate::{repo, util};
+use crate::settings::{read_settings, Settings};
 
 const DIR: &str = "data/sessions";
 const PID_FILE: &str = "session.pid";
@@ -24,10 +24,18 @@ pub struct Session {
     pub date: DateTime<Utc>,
     #[serde(default = "default_rev")]
     pub rev: String,
+    #[serde(default)]
+    pub jar_info: JarInfo,
     password: Option<String>, // TODO: Serialize only when writing the session.toml file
     // Serialize as `running: bool` for use in the html templates
     #[serde(skip_deserializing, rename(serialize = "running"), serialize_with = "serialize_running")]
     pid: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JarInfo {
+    pub name: String,
+    pub sha256: String,
 }
 
 impl Session {
@@ -110,25 +118,27 @@ impl Session {
     }
 
     pub async fn new(password: Option<String>) -> Result<Session> {
+        let settings = read_settings().await?;
+        let jar = PathBuf::from(repo::DIR).join(&settings.jar_file);
+
         let mut session = Session {
             id: Uuid::new_v4(),
             date: Utc::now(),
             rev: repo::get_head()?,
+            jar_info: JarInfo::new(jar)?,
             password,
             pid: None,
         };
 
-        session.launch().await?;
+        session.launch(settings).await?;
         session.write()?;
 
         Ok(session)
     }
 
-    async fn launch(&mut self) -> Result<()> {
+    async fn launch(&mut self, settings: Settings) -> Result<()> {
         let dir = self.get_dir();
         fs::create_dir_all(&dir)?;
-
-        let settings = read_settings().await?;
 
         repo::run_command(&settings.pre_session_cmd)?;
 
@@ -185,6 +195,30 @@ impl Session {
         repo::run_command(&read_settings().await?.post_session_cmd)?;
 
         Ok(())
+    }
+}
+
+impl JarInfo {
+    fn new<P: AsRef<Path>>(path: P) -> Result<JarInfo> {
+        let jar_name = path.file_name()
+            .expect("Invalid jar file")
+            .to_str()
+            .map(ToString::to_string)
+            .expect("Invalid file name");
+
+        Ok(JarInfo {
+            name: jar_name,
+            sha256: util::file_sha256(path)?,
+        })
+    }
+}
+
+impl Default for JarInfo {
+    fn default() -> Self {
+        Self {
+            name: "<unknown>".to_string(),
+            sha256: "<unknown>".to_string(),
+        }
     }
 }
 

@@ -12,6 +12,7 @@ git2 = "0.18.1"
 rocket = { version = "0.5.0", features = ["secrets", "uuid"] }
 rust-crypto = "0.2.36"
 serde = { version = "1.0.193", features = ["derive"] }
+sha2 = "0.10.8"
 toml = "0.8.8"
 uuid = { version = "1.6.1", features = ["v4", "serde"] }
 
