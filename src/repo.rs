@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::from_utf8;
@@ -166,33 +167,42 @@ fn add(repo: &Repository, path: String) -> Git2Result<()> {
     index.write()
 }
 
-fn diff_print(_delta: DiffDelta<'_>, _hunk: Option<DiffHunk<'_>>, line: DiffLine<'_>) -> bool {
-    let line_type = line.origin_value();
-    let content = match from_utf8(line.content()) {
-        Ok(c) => c,
-        Err(e) => {
+fn diff_print(buf: &mut Vec<u8>) -> impl FnMut(DiffDelta<'_>, Option<DiffHunk<'_>>, DiffLine<'_>) -> bool + '_ {
+    return |_, _, line| {
+        let line_type = line.origin_value();
+        let content = match from_utf8(line.content()) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Failed to parse diff line: {e}");
+                return false;
+            }
+        };
+
+        let r = if line_type == DiffLineType::Addition || line_type == DiffLineType::Deletion || line_type == DiffLineType::Context {
+            write!(buf, "{}{}", line.origin(), content)
+        } else {
+            write!(buf, "{}", content)
+        };
+
+        if let Err(e) = r {
             eprintln!("Failed to print diff line: {e}");
             return false;
         }
-    };
 
-    if line_type == DiffLineType::Addition || line_type == DiffLineType::Deletion || line_type == DiffLineType::Context {
-        print!("{}{}", line.origin(), content)
-    } else {
-        print!("{}", content)
+        true
     }
-
-    true
 }
 
-fn diff(repo: &Repository) -> Git2Result<()> {
+/// Equivalent to `git diff --cached`
+fn diff_bytes(repo: &Repository) -> Git2Result<Vec<u8>> {
     let head = repo.revparse_single("HEAD")?;
     let head_tree = head.peel_to_tree()?;
 
+    let mut buf = Vec::new();
     let diff = repo.diff_tree_to_index(Some(&head_tree), None, None)?;
-    diff.print(DiffFormat::Patch, diff_print)?;
+    diff.print(DiffFormat::Patch, diff_print(&mut buf))?;
 
-    Ok(())
+    Ok(buf)
 }
 
 pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
@@ -203,20 +213,9 @@ pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
     add(&repo, settings.mappings_file)?;
 
     // Create the patch
-    // diff(&repo)?;
+    let patch = diff_bytes(&repo)?;
 
-    let diff = Command::new("git")
-        .current_dir(DIR)
-        .arg("diff")
-        .arg("--cached") // diff staged changes
-        .stderr(Stdio::inherit())
-        .output()?;
-
-    if !diff.status.success() {
-        Ok(vec![])
-    } else {
-        Ok(diff.stdout)
-    }
+    Ok(patch)
 }
 
 pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
