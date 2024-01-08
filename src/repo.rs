@@ -2,8 +2,9 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
+use std::str::from_utf8;
 
-use git2::{BranchType, FetchOptions, ObjectType, Oid, Repository};
+use git2::{BranchType, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffLineType, FetchOptions, IndexAddOption, ObjectType, Oid, Repository};
 use git2::build::{CheckoutBuilder, RepoBuilder};
 
 use crate::settings::read_settings;
@@ -159,22 +160,55 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     err!("Not currently on a branch")
 }
 
+fn add(repo: &Repository, path: String) -> Git2Result<()> {
+    let mut index = repo.index()?;
+    index.add_all([path].iter(), IndexAddOption::DEFAULT, None)?;
+    index.write()
+}
+
+fn diff_print(_delta: DiffDelta<'_>, _hunk: Option<DiffHunk<'_>>, line: DiffLine<'_>) -> bool {
+    let line_type = line.origin_value();
+    let content = match from_utf8(line.content()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to print diff line: {e}");
+            return false;
+        }
+    };
+
+    if line_type == DiffLineType::Addition || line_type == DiffLineType::Deletion || line_type == DiffLineType::Context {
+        print!("{}{}", line.origin(), content)
+    } else {
+        print!("{}", content)
+    }
+
+    true
+}
+
+fn diff(repo: &Repository) -> Git2Result<()> {
+    let head = repo.revparse_single("HEAD")?;
+    let head_tree = head.peel_to_tree()?;
+
+    let diff = repo.diff_tree_to_index(Some(&head_tree), None, None)?;
+    diff.print(DiffFormat::Patch, diff_print)?;
+
+    Ok(())
+}
+
 pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
     let settings = read_settings().await?;
+    let repo = open_repo()?;
 
     // Stage changes
-    Command::new("git")
-        .current_dir(DIR)
-        .arg("add")
-        .arg(settings.mappings_file)
-        .stderr(Stdio::inherit())
-        .status()?;
+    add(&repo, settings.mappings_file)?;
 
     // Create the patch
+    // diff(&repo)?;
+
     let diff = Command::new("git")
         .current_dir(DIR)
         .arg("diff")
-        .arg("--cached")
+        .arg("--cached") // diff staged changes
         .stderr(Stdio::inherit())
         .output()?;
 

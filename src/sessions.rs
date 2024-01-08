@@ -200,8 +200,8 @@ impl Session {
 
 impl JarInfo {
     fn new<P: AsRef<Path>>(path: P) -> Result<JarInfo> {
-        let jar_name = path.file_name()
-            .expect("Invalid jar file")
+        let jar_name = path.as_ref().file_name()
+            .expect("Invalid jar file") // TODO: return error instead
             .to_str()
             .map(ToString::to_string)
             .expect("Invalid file name");
