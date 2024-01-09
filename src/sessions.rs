@@ -1,8 +1,10 @@
 use std::error::Error;
 use std::fs;
 use std::fs::File;
+use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::result::Result as StdResult;
 use std::string::ToString;
 
 use chrono::{DateTime, Utc};
@@ -11,12 +13,13 @@ use uuid::Uuid;
 
 use crate::{repo, util};
 use crate::settings::{read_settings, Settings};
+use crate::util::{some_or_throw};
 
 const DIR: &str = "data/sessions";
 const PID_FILE: &str = "session.pid";
 const PATCH_FILE: &str = "session.patch";
 
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
+type Result<T> = StdResult<T, Box<dyn Error>>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Session {
@@ -43,12 +46,12 @@ impl Session {
         self.pid.is_some()
     }
 
-    pub fn check_is_running(&mut self) -> std::io::Result<bool> {
+    pub fn check_is_running(&mut self) -> IoResult<bool> {
         self.check_process()?;
         Ok(self.is_running())
     }
 
-    fn check_process(&mut self) -> std::io::Result<()> {
+    fn check_process(&mut self) -> IoResult<()> {
         if let Some(pid) = self.pid {
             let status = Command::new("kill")
                 .arg("-0")
@@ -62,7 +65,7 @@ impl Session {
         Ok(())
     }
 
-    fn invalidate_pid(&mut self) -> std::io::Result<()> {
+    fn invalidate_pid(&mut self) -> IoResult<()> {
         self.pid = None;
 
         fs::remove_file(self.get_file(PID_FILE))
@@ -102,7 +105,7 @@ impl Session {
         Ok(session)
     }
 
-    fn write_pid<P: AsRef<Path>>(path: P, pid: u32) -> std::io::Result<()> {
+    fn write_pid<P: AsRef<Path>>(path: P, pid: u32) -> IoResult<()> {
         fs::write(path, pid.to_string())
     }
 
@@ -200,11 +203,8 @@ impl Session {
 
 impl JarInfo {
     fn new<P: AsRef<Path>>(path: P) -> Result<JarInfo> {
-        let jar_name = path.as_ref().file_name()
-            .expect("Invalid jar file") // TODO: return error instead
-            .to_str()
-            .map(ToString::to_string)
-            .expect("Invalid file name");
+        let jar_name = some_or_throw!(path.as_ref().file_name(), "Invalid jar file");
+        let jar_name = some_or_throw!(jar_name.to_str(), "Invalid file name").to_string();
 
         Ok(JarInfo {
             name: jar_name,
@@ -247,6 +247,7 @@ pub fn load_sessions() -> Result<Vec<Session>> {
     Ok(sessions)
 }
 
-pub fn serialize_running<S>(value: &Option<u32>, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: Serializer {
+pub fn serialize_running<S>(value: &Option<u32>, serializer: S) -> StdResult<S::Ok, S::Error>
+    where S: Serializer {
     serializer.serialize_bool(value.is_some())
 }

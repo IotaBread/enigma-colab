@@ -1,12 +1,54 @@
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Error as IoError, Read};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
 use sha2::digest::consts::U32;
 use sha2::digest::generic_array::GenericArray;
 
-pub fn file_sha256<P: AsRef<Path>>(path: P) -> Result<String, std::io::Error> {
+#[derive(Debug)]
+pub struct StrError(pub String);
+
+impl Display for StrError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for StrError {
+}
+
+macro_rules! error {
+    ($val:literal) => { $crate::util::StrError($val.to_string()) };
+    ($($arg:tt)*) => { $crate::util::StrError(format!($($arg)*)) };
+}
+
+macro_rules! throw {
+    ($val:literal) => {
+        return Err(From::from($crate::util::error!($val)))
+    };
+    ($($arg:tt)*) => {
+        return Err(From::from($crate::util::error!($($arg)*)))
+    }
+}
+
+macro_rules! some_or_throw {
+    ($option:expr, $msg:literal) => {
+        if let Some(value) = $option {
+            value
+        } else {
+            $crate::util::throw!($msg);
+        }
+    };
+}
+
+pub(crate) use error;
+pub(crate) use throw;
+pub(crate) use some_or_throw;
+
+pub fn file_sha256<P: AsRef<Path>>(path: P) -> Result<String, IoError> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
 

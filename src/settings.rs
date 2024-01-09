@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fs;
 use std::path::Path;
 
@@ -50,7 +51,7 @@ impl Default for RepoSettings {
     }
 }
 
-pub async fn read_settings() -> Result<Settings, Box<dyn std::error::Error>> {
+pub async fn read_settings() -> Result<Settings, Box<dyn Error>> {
     let path = Path::new("data/CoLab.toml");
     if path.exists() {
         let toml_str = fs::read_to_string(path)?;
@@ -63,7 +64,7 @@ pub async fn read_settings() -> Result<Settings, Box<dyn std::error::Error>> {
     }
 }
 
-pub async fn write_settings(settings: &Settings) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn write_settings(settings: &Settings) -> Result<(), Box<dyn Error>> {
     let toml_str = toml::to_string_pretty(&settings)?;
     fs::create_dir_all("data/")?;
     fs::write("data/CoLab.toml", toml_str)?;

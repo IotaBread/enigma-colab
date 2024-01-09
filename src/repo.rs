@@ -1,7 +1,6 @@
 use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::fs;
-use std::io::Write;
+use std::io::{Result as IoResult, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::str::from_utf8;
@@ -10,33 +9,13 @@ use git2::{BranchType, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffLineType, 
 use git2::build::{CheckoutBuilder, RepoBuilder};
 
 use crate::settings::read_settings;
+use crate::util::throw;
 
 pub const DIR: &str = "data/repo";
 
 type Git2Result<T> = Result<T, git2::Error>;
 
-#[derive(Debug)]
-struct StrError(String);
-
-impl Display for StrError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Error for StrError {
-}
-
-macro_rules! err {
-    ($val:literal) => {
-        return Err(Box::from(StrError($val.to_string())))
-    };
-    ($($arg:tt)*) => {
-        return Err(Box::from(StrError(format!($($arg)*))))
-    }
-}
-
-pub fn run_command(command: &String) -> std::io::Result<Option<ExitStatus>> {
+pub fn run_command(command: &String) -> IoResult<Option<ExitStatus>> {
     Ok(if !command.is_empty() {
         Some(Command::new("sh")
             .current_dir(DIR)
@@ -48,7 +27,7 @@ pub fn run_command(command: &String) -> std::io::Result<Option<ExitStatus>> {
     })
 }
 
-fn open_repo() -> Result<Repository, git2::Error> {
+fn open_repo() -> Git2Result<Repository> {
     Repository::open(DIR)
 }
 
@@ -126,7 +105,7 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
         // current_branch is the simple name, we need it's full name (i.e. refs/heads/branch)
         let branch_ref = match branch.get().name() {
             Some(s) => s,
-            None => { err!("Branch ref has an invalid name"); }
+            None => { throw!("Branch ref has an invalid name"); }
         };
 
         let remote_name = repo.branch_upstream_remote(branch_ref)?;
@@ -156,11 +135,11 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
 
             return Ok(Ok(target_oid.to_string()));
         } else if analysis.is_normal() {
-            err!("Merge required, please resolve it manually")
+            throw!("Merge required, please resolve it manually")
         }
     }
 
-    err!("Not currently on a branch")
+    throw!("Not currently on a branch")
 }
 
 pub fn add(repo: &Repository, path: String) -> Git2Result<()> {
