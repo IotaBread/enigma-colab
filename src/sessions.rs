@@ -238,7 +238,8 @@ pub fn load_sessions() -> Result<Vec<Session>> {
             let file_type = entry.file_type()?;
 
             if file_type.is_dir() {
-                let session = Session::read(entry.path())?;
+                let mut session = Session::read(entry.path())?;
+                session.check_process()?;
                 sessions.push(session);
             }
         }
