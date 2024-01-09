@@ -8,6 +8,12 @@
     {%- endif %}
 
     <p>{{ session.date }} at {{ session.rev }}</p>
+
+    <pre><code>
+Jar name: {{ session.jar_info.name }}
+Jar sha256: {{ session.jar_info.sha256 }}
+    </code></pre>
+
     {% if admin and session.running %}
     <form action="/sessions/{{ session.id }}/finish" method="POST">
         <input type="submit" value="Finish session" />

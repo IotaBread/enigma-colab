@@ -11,7 +11,7 @@ In no particular order
 - [ ] Session access sharing
 - [ ] Show info to join a session (i.e. address, port, password)
 - [x] Show HEAD commit for sessions
-- [ ] Show jar info for sessions
+- [x] Show jar info for sessions
 - [ ] Auto saving
 - [ ] CSS!
 - [ ] Un-hardcode the admin credentials
