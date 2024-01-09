@@ -28,5 +28,8 @@ In no particular order
 - [ ] Track changes per user?
 - [ ] [Admin] Better settings UI
 - [ ] [Admin] Git pull feedback
+- [x] Use git2 instead of invoking git as a command
+- [ ] Allow changing branches
+- [ ] Tests for git-related functions
 - [ ] Releases
 - [ ] Documentation

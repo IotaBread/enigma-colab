@@ -1,11 +1,12 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, ExitStatus};
 use std::str::from_utf8;
 
-use git2::{BranchType, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffLineType, FetchOptions, IndexAddOption, ObjectType, Oid, Repository};
+use git2::{BranchType, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffLineType, FetchOptions, IndexAddOption, ObjectType, Oid, Repository, ResetType, StatusOptions};
 use git2::build::{CheckoutBuilder, RepoBuilder};
 
 use crate::settings::read_settings;
@@ -85,11 +86,12 @@ pub async fn list_local_branches() -> Git2Result<Vec<String>> {
 }
 
 pub fn fetch() -> Git2Result<()> {
-    fetch_repo(open_repo()?)
+    let repo = open_repo()?;
+    fetch_repo(&repo)
 }
 
 /// Based on libgit2's [example fetch.c](https://libgit2.org/libgit2/ex/v1.7.1/fetch.html)
-pub fn fetch_repo(repo: Repository) -> Git2Result<()> {
+pub fn fetch_repo(repo: &Repository) -> Git2Result<()> {
     let mut options = FetchOptions::new(); // TODO: Progress message
     let remotes = repo.remotes()?;
     let mut remotes_iter = remotes.iter();
@@ -161,7 +163,7 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     err!("Not currently on a branch")
 }
 
-fn add(repo: &Repository, path: String) -> Git2Result<()> {
+pub fn add(repo: &Repository, path: String) -> Git2Result<()> {
     let mut index = repo.index()?;
     index.add_all([path].iter(), IndexAddOption::DEFAULT, None)?;
     index.write()
@@ -194,7 +196,7 @@ fn diff_print(buf: &mut Vec<u8>) -> impl FnMut(DiffDelta<'_>, Option<DiffHunk<'_
 }
 
 /// Equivalent to `git diff --cached`
-fn diff_bytes(repo: &Repository) -> Git2Result<Vec<u8>> {
+pub fn diff_bytes(repo: &Repository) -> Git2Result<Vec<u8>> {
     let head = repo.revparse_single("HEAD")?;
     let head_tree = head.peel_to_tree()?;
 
@@ -218,34 +220,52 @@ pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(patch)
 }
 
+/// Equivalent to `git reset --hard`
+pub fn hard_reset(repo: &Repository) -> Git2Result<()> {
+    let head = repo.head()?;
+    let head_commit = head.peel_to_commit()?;
+    repo.reset(head_commit.as_object(), ResetType::Hard, None)?;
+
+    Ok(())
+}
+
+/// Equivalent to `git clean -f -d [<path>]`
+pub fn clean_repo(repo: &Repository, path: Option<String>) -> Result<(), Box<dyn Error>> {
+    let mut options = StatusOptions::new();
+    options.include_untracked(true);
+    if let Some(path) = path {
+        options.pathspec(path);
+    }
+
+    let statuses = repo.statuses(Some(&mut options))?;
+
+    for status_entry in statuses.iter() {
+        let status = status_entry.status();
+        if status.is_index_new() || status.is_wt_new() {
+            if let Some(path) = status_entry.path() {
+                let path = Path::new(path);
+
+                if path.is_dir() {
+                    fs::remove_dir_all(path)?;
+                } else if path.exists() {
+                    fs::remove_file(path)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
     let settings = read_settings().await?;
+    let repo = open_repo()?;
 
     // Remove staged and working dir changes
-    let reset = Command::new("git")
-        .current_dir(DIR)
-        .arg("reset")
-        .arg("--hard")
-        .stderr(Stdio::inherit())
-        .status()?;
-
-    if !reset.success() {
-        err!("git reset failed with code {code}", code = reset.code().unwrap_or(-1));
-    }
+    hard_reset(&repo)?;
 
     // Remove any untracked files
-    let clean = Command::new("git")
-        .current_dir(DIR)
-        .arg("clean")
-        .arg("-f") // Force, refuses to delete files by default
-        .arg("-d") // Recurse
-        .arg(settings.mappings_file)
-        .stderr(Stdio::inherit())
-        .status()?;
-
-    if !clean.success() {
-        err!("git clean failed with code {code}", code = reset.code().unwrap_or(-1));
-    }
+    clean_repo(&repo, Some(settings.mappings_file))?;
 
     Ok(())
 }
