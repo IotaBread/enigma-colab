@@ -1,8 +1,6 @@
 use std::convert::Infallible;
 use std::env;
 
-use crypto::digest::Digest;
-use crypto::sha3::Sha3;
 use rocket::{Request, Route};
 use rocket::form::Form;
 use rocket::fs::NamedFile;
@@ -15,7 +13,7 @@ use rocket::serde::Deserialize;
 use rocket_dyn_templates::{context, Template};
 use uuid::Uuid;
 
-use crate::{repo, SessionsState};
+use crate::{repo, SessionsState, util};
 use crate::sessions::Session;
 use crate::settings;
 use crate::settings::{RepoSettings, Settings};
@@ -95,12 +93,6 @@ impl SettingsData {
     }
 }
 
-fn hash_password(password: &str) -> String {
-    let mut hasher = Sha3::sha3_256();
-    hasher.input_str(password);
-    hasher.result_str()
-}
-
 #[get("/login")]
 fn login(_user: User) -> Redirect {
     Redirect::to(uri!(index))
@@ -120,7 +112,7 @@ fn login_form(cookies: &CookieJar<'_>, login: Form<Login<'_>>) -> Flash<Redirect
     let user = env::var("USER");
     let password = env::var("PASSWORD_HASH");
     if user.is_ok() && password.is_ok() {
-        if login.user == user.unwrap() && hash_password(&login.password) == password.unwrap() {
+        if login.user == user.unwrap() && util::sha3_256(&login.password) == password.unwrap() {
             let id = env::var("ADMIN_SESSION_ID");
             if id.is_ok() {
                 cookies.add_private(("session", id.unwrap()));

@@ -5,6 +5,7 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 use sha2::digest::consts::U32;
 use sha2::digest::generic_array::GenericArray;
+use sha3::Sha3_256;
 
 macro_rules! throw {
     ($val:literal) => {
@@ -46,4 +47,11 @@ pub fn file_sha256<P: AsRef<Path>>(path: P) -> Result<String, IoError> {
 
     let result: GenericArray<u8, U32> = Digest::finalize(hasher);
     Ok(format!("{:x}", result))
+}
+
+pub fn sha3_256<T: AsRef<[u8]>>(input: T) -> String {
+    let mut hasher = Sha3_256::new();
+    hasher.update(input);
+    let result = Digest::finalize(hasher);
+    format!("{:x}", result)
 }
