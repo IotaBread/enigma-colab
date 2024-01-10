@@ -242,6 +242,11 @@ pub fn hard_reset(repo: &Repository) -> Git2Result<()> {
 
 /// Equivalent to `git clean -f -d [<path>]`
 pub fn clean_repo(repo: &Repository, path: Option<String>) -> Result<(), Box<dyn Error>> {
+    let workdir = match repo.workdir() {
+        Some(p) => p,
+        None => { return Ok(()); }
+    };
+
     let mut options = StatusOptions::new();
     options.include_untracked(true);
     if let Some(path) = path {
@@ -254,7 +259,7 @@ pub fn clean_repo(repo: &Repository, path: Option<String>) -> Result<(), Box<dyn
         let status = status_entry.status();
         if status.is_index_new() || status.is_wt_new() {
             if let Some(path) = status_entry.path() {
-                let path = Path::new(path);
+                let path = workdir.join(path);
 
                 if path.is_dir() {
                     fs::remove_dir_all(path)?;
@@ -328,8 +333,19 @@ mod tests {
         let upstream = upstream.unwrap();
 
         let target = env::temp_dir().join("testrepo_clone");
-        let repo = clone_repo(upstream.as_str(), Some("master"), target.as_path())?;
+        let repo = if !target.exists() {
+            clone_repo(upstream.as_str(), Some("master"), target.as_path())?
+        } else {
+            Repository::open(target.as_path())?
+        };
+
         Ok((target, repo))
+    }
+
+    fn open_test_repo() -> Result<(PathBuf, Repository), Box<dyn Error>> {
+        let dir = setup_test_repo()?;
+        let repo = Repository::open(&dir)?;
+        Ok((dir, repo))
     }
 
     #[test]
@@ -340,6 +356,61 @@ mod tests {
         let file = target.join("file.txt");
         assert!(file.exists());
         assert_eq!(String::from("Lorem ipsum dolor sit amet\n"), fs::read_to_string(file)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_hard_reset() -> Result<(), Box<dyn Error>> {
+        let (target, repo) = open_test_repo()?;
+
+        let file = target.join("file.txt");
+        let original_contents = String::from("Lorem ipsum dolor sit amet\n");
+        assert_eq!(original_contents, fs::read_to_string(&file)?);
+
+        let new_contents = String::from("Replaced contents!\n");
+        fs::write(&file, &new_contents)?;
+        assert_eq!(new_contents, fs::read_to_string(&file)?);
+
+        hard_reset(&repo)?;
+        assert_eq!(original_contents, fs::read_to_string(file)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_clean() -> Result<(), Box<dyn Error>> {
+        let (target, repo) = open_test_repo()?;
+
+        let file = target.join("file.txt");
+        let new_file = target.join("meow.txt");
+        let new_file2 = target.join("foo.txt");
+        let new_file3 = target.join("baz.txt");
+        fs::write(&new_file, "meow meow meow mawww")?;
+        fs::write(&new_file2, "foo bar baz")?;
+        fs::write(&new_file3, "baz bar foo")?;
+        assert!(new_file.exists());
+        assert!(new_file2.exists());
+        assert!(new_file3.exists());
+        assert!(file.exists());
+
+        clean_repo(&repo, Some("file.txt".to_string()))?;
+
+        assert!(file.exists(), "clean_repo() removed a tracked file");
+        assert!(new_file.exists(), "clean_repo() removed a file that shouldn't have been affected");
+        assert!(new_file2.exists(), "clean_repo() removed a file that shouldn't have been affected");
+        assert!(new_file3.exists(), "clean_repo() removed a file that shouldn't have been affected");
+
+        clean_repo(&repo, Some("meow.txt".to_string()))?;
+
+        assert!(!new_file.exists(), "clean_repo() did not remove an untracked file");
+        assert!(new_file2.exists(), "clean_repo() removed a file that shouldn't have been affected");
+        assert!(new_file3.exists(), "clean_repo() removed a file that shouldn't have been affected");
+
+        clean_repo(&repo, None)?;
+
+        assert!(!new_file2.exists(), "clean_repo() did not remove an untracked file");
+        assert!(!new_file3.exists(), "clean_repo() did not remove an untracked file");
 
         Ok(())
     }
