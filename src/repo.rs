@@ -161,7 +161,7 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     throw!("Not currently on a branch")
 }
 
-pub fn add(repo: &Repository, path: &[String]) -> Git2Result<()> {
+pub fn add(repo: &Repository, path: &[&str]) -> Git2Result<()> {
     let mut index = repo.index()?;
     index.add_all(path.iter(), IndexAddOption::DEFAULT, None)?;
     index.write()
@@ -223,7 +223,7 @@ pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
     let repo = open_repo()?;
 
     // Stage changes
-    add(&repo, &[settings.mappings_file])?;
+    add(&repo, &[settings.mappings_file.as_str()])?;
 
     // Create the patch
     let patch = diff_bytes(&repo)?;
@@ -289,6 +289,9 @@ pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use std::env;
+    use git2::Status;
+    use tempfile::TempDir;
+
     use super::*;
 
     macro_rules! test_file {
@@ -314,35 +317,32 @@ mod tests {
         Ok(())
     }
 
-    fn setup_test_repo() -> IoResult<PathBuf> {
+    fn setup_test_repo() -> IoResult<TempDir> {
         let source = PathBuf::from(test_file!("testrepo/")).canonicalize()?;
-        let dir = env::temp_dir().join("testrepo");
+        let dir = tempfile::Builder::new().prefix("testrepo").tempdir()?;
+        let path = dir.path();
 
-        if !dir.exists() {
-            copy_dir_all(source, &dir)?;
-            fs::rename(&dir.join(".gitted"), &dir.join(".git"))?;
-        }
+        copy_dir_all(source, path)?;
+        fs::rename(path.join(".gitted"), path.join(".git"))?;
 
         Ok(dir)
     }
 
-    fn clone_test_repo() -> Result<(PathBuf, Repository), Box<dyn Error>> {
-        let upstream_dir = setup_test_repo()?.canonicalize()?;
-        let upstream = upstream_dir.into_os_string().into_string();
+    fn clone_test_repo(upstream_dir: &TempDir) -> Result<(TempDir, Repository), Box<dyn Error>> {
+        let upstream_path = upstream_dir.path().canonicalize()?;
+
+        let upstream = upstream_path.into_os_string().into_string();
         assert!(upstream.is_ok(), "Path contains invalid UTF-8");
         let upstream = upstream.unwrap();
 
-        let target = env::temp_dir().join("testrepo_clone");
-        let repo = if !target.exists() {
-            clone_repo(upstream.as_str(), Some("master"), target.as_path())?
-        } else {
-            Repository::open(target.as_path())?
-        };
+        let repo_dir = tempfile::Builder::new().prefix("testrepo_clone").tempdir()?;
+        let repo_path = repo_dir.path();
+        let repo = clone_repo(upstream.as_str(), Some("master"), repo_path)?;
 
-        Ok((target, repo))
+        Ok((repo_dir, repo))
     }
 
-    fn open_test_repo() -> Result<(PathBuf, Repository), Box<dyn Error>> {
+    fn open_test_repo() -> Result<(TempDir, Repository), Box<dyn Error>> {
         let dir = setup_test_repo()?;
         let repo = Repository::open(&dir)?;
         Ok((dir, repo))
@@ -350,21 +350,24 @@ mod tests {
 
     #[test]
     fn test_clone() -> Result<(), Box<dyn Error>> {
-        let (target, repo) = clone_test_repo()?;
+        let upstream_repo_dir = setup_test_repo()?;
+        let (repo_dir, repo) = clone_test_repo(&upstream_repo_dir)?;
 
         assert!(repo.path().exists());
-        let file = target.join("file.txt");
+        let file = repo_dir.path().join("file.txt");
         assert!(file.exists());
         assert_eq!(String::from("Lorem ipsum dolor sit amet\n"), fs::read_to_string(file)?);
 
+        upstream_repo_dir.close()?;
+        repo_dir.close()?;
         Ok(())
     }
 
     #[test]
     fn test_hard_reset() -> Result<(), Box<dyn Error>> {
-        let (target, repo) = open_test_repo()?;
+        let (repo_dir, repo) = open_test_repo()?;
 
-        let file = target.join("file.txt");
+        let file = repo_dir.path().join("file.txt");
         let original_contents = String::from("Lorem ipsum dolor sit amet\n");
         assert_eq!(original_contents, fs::read_to_string(&file)?);
 
@@ -375,17 +378,19 @@ mod tests {
         hard_reset(&repo)?;
         assert_eq!(original_contents, fs::read_to_string(file)?);
 
+        repo_dir.close()?;
         Ok(())
     }
 
     #[test]
     fn test_clean() -> Result<(), Box<dyn Error>> {
-        let (target, repo) = open_test_repo()?;
+        let (repo_dir, repo) = open_test_repo()?;
+        let repo_path = repo_dir.path();
 
-        let file = target.join("file.txt");
-        let new_file = target.join("meow.txt");
-        let new_file2 = target.join("foo.txt");
-        let new_file3 = target.join("baz.txt");
+        let file = repo_path.join("file.txt");
+        let new_file = repo_path.join("meow.txt");
+        let new_file2 = repo_path.join("foo.txt");
+        let new_file3 = repo_path.join("baz.txt");
         fs::write(&new_file, "meow meow meow mawww")?;
         fs::write(&new_file2, "foo bar baz")?;
         fs::write(&new_file3, "baz bar foo")?;
@@ -412,6 +417,84 @@ mod tests {
         assert!(!new_file2.exists(), "clean_repo() did not remove an untracked file");
         assert!(!new_file3.exists(), "clean_repo() did not remove an untracked file");
 
+        repo_dir.close()?;
         Ok(())
+    }
+
+    #[test]
+    fn test_add() -> Result<(), Box<dyn Error>> {
+        let (repo_dir, repo) = open_test_repo()?;
+        let repo_path = repo_dir.path();
+
+        let file = repo_path.join("new.txt");
+        let content = String::from("New file\n");
+        fs::write(&file, &content)?;
+        assert_eq!(content, fs::read_to_string(&file)?);
+
+        add(&repo, &["new.txt"])?;
+
+        assert!(repo.status_file(Path::new("new.txt"))?.is_index_new());
+
+        repo_dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit() -> Result<(), Box<dyn Error>> {
+        let (repo_dir, repo) = open_test_repo()?;
+        let repo_path = repo_dir.path();
+
+        let file = repo_path.join("new.txt");
+        let content = String::from("New committed file\n");
+        fs::write(&file, &content)?;
+        assert_eq!(content, fs::read_to_string(file)?);
+
+        add(&repo, &["*"])?;
+        commit(&repo, "Add new.txt")?;
+
+        assert_eq!(Status::CURRENT, repo.status_file(Path::new("new.txt"))?);
+
+        repo_dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_fetch() -> Result<(), Box<dyn Error>> {
+        let (upstream_dir, upstream) = open_test_repo()?;
+        let (repo_dir, repo) = clone_test_repo(&upstream_dir)?;
+        let upstream_path = upstream_dir.path();
+        let repo_path = repo_dir.path();
+
+        let upstream_file = upstream_path.join("file.txt");
+        let new_contents = String::from("Lorem ipsum dolor sit amet\nNew line\n");
+        fs::write(&upstream_file, &new_contents)?;
+        assert_eq!(new_contents, fs::read_to_string(upstream_file)?);
+
+        add(&upstream, &["file.txt"])?;
+        commit(&upstream, "Update file.txt")?;
+
+        let pre_fetch = repo.revparse_single("refs/remotes/origin/master")?.id();
+        fetch_repo(&repo)?;
+        let post_fetch = repo.revparse_single("refs/remotes/origin/master")?.id();
+
+        assert_ne!(pre_fetch, post_fetch, "refs/remotes/origin/master wasn't updated");
+
+        let repo_file = repo_path.join("file.txt");
+        let old_contents = String::from("Lorem ipsum dolor sit amet\n");
+        assert_eq!(old_contents, fs::read_to_string(repo_file)?, "Contents of a file were updated after fetching");
+
+        upstream_dir.close()?;
+        repo_dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_pull() -> Result<(), Box<dyn Error>> {
+        todo!()
+    }
+
+    #[test]
+    fn test_diff() -> Result<(), Box<dyn Error>> {
+        todo!()
     }
 }

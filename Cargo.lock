@@ -447,6 +447,7 @@ dependencies = [
  "rust-crypto",
  "serde",
  "sha2",
+ "tempfile",
  "toml",
  "uuid",
 ]
