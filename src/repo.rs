@@ -114,9 +114,14 @@ pub fn fetch_repo(repo: &Repository) -> Git2Result<()> {
     Ok(())
 }
 
-/// Based on libgit2's [example merge.c](https://libgit2.org/libgit2/ex/v1.7.1/merge.html)
 pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     let repo = open_repo()?;
+    pull_repo(&repo).map(|r| { r.map(|id| id.to_string()) })
+}
+
+
+/// Based on libgit2's [example merge.c](https://libgit2.org/libgit2/ex/v1.7.1/merge.html)
+pub fn pull_repo(repo: &Repository) -> Result<Result<Oid, String>, Box<dyn Error>> {
     let mut head_ref = repo.head()?;
 
     if let Some(current_branch) = head_ref.shorthand() {
@@ -152,7 +157,7 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
             let reflog_msg = format!("pull {} {}: Fast-forward", remote_name, remote_branch_name);
             head_ref.set_target(target_oid, reflog_msg.as_str())?;
 
-            return Ok(Ok(target_oid.to_string()));
+            return Ok(Ok(target_oid));
         } else if analysis.is_normal() {
             throw!("Merge required, please resolve it manually")
         }
@@ -203,7 +208,7 @@ fn diff_print(buf: &mut Vec<u8>) -> impl FnMut(DiffDelta<'_>, Option<DiffHunk<'_
         }
 
         true
-    }
+    };
 }
 
 /// Equivalent to `git diff --cached`
@@ -300,6 +305,15 @@ mod tests {
         };
     }
 
+    macro_rules! write_assert {
+        ($file:expr, $content:literal) => {{
+            let s = $content.to_string();
+            fs::write(&$file, &s)?;
+            assert_eq!(s, fs::read_to_string(&$file)?);
+            s
+        }};
+    }
+
     fn copy_dir_all<P: AsRef<Path>, P2: AsRef<Path>>(src: P, dst: P2) -> IoResult<()> {
         fs::create_dir_all(&dst)?;
         for entry in fs::read_dir(src)? {
@@ -371,9 +385,7 @@ mod tests {
         let original_contents = String::from("Lorem ipsum dolor sit amet\n");
         assert_eq!(original_contents, fs::read_to_string(&file)?);
 
-        let new_contents = String::from("Replaced contents!\n");
-        fs::write(&file, &new_contents)?;
-        assert_eq!(new_contents, fs::read_to_string(&file)?);
+        write_assert!(file, "Replaced contents!\n");
 
         hard_reset(&repo)?;
         assert_eq!(original_contents, fs::read_to_string(file)?);
@@ -391,9 +403,10 @@ mod tests {
         let new_file = repo_path.join("meow.txt");
         let new_file2 = repo_path.join("foo.txt");
         let new_file3 = repo_path.join("baz.txt");
-        fs::write(&new_file, "meow meow meow mawww")?;
-        fs::write(&new_file2, "foo bar baz")?;
-        fs::write(&new_file3, "baz bar foo")?;
+        write_assert!(new_file, "meow meow meow mawww");
+        write_assert!(new_file2, "foo bar baz");
+        write_assert!(new_file3, "baz bar foo");
+
         assert!(new_file.exists());
         assert!(new_file2.exists());
         assert!(new_file3.exists());
@@ -427,9 +440,7 @@ mod tests {
         let repo_path = repo_dir.path();
 
         let file = repo_path.join("new.txt");
-        let content = String::from("New file\n");
-        fs::write(&file, &content)?;
-        assert_eq!(content, fs::read_to_string(&file)?);
+        write_assert!(file, "New file\n");
 
         add(&repo, &["new.txt"])?;
 
@@ -445,9 +456,7 @@ mod tests {
         let repo_path = repo_dir.path();
 
         let file = repo_path.join("new.txt");
-        let content = String::from("New committed file\n");
-        fs::write(&file, &content)?;
-        assert_eq!(content, fs::read_to_string(file)?);
+        write_assert!(file, "New committed file\n");
 
         add(&repo, &["*"])?;
         commit(&repo, "Add new.txt")?;
@@ -466,9 +475,7 @@ mod tests {
         let repo_path = repo_dir.path();
 
         let upstream_file = upstream_path.join("file.txt");
-        let new_contents = String::from("Lorem ipsum dolor sit amet\nNew line\n");
-        fs::write(&upstream_file, &new_contents)?;
-        assert_eq!(new_contents, fs::read_to_string(upstream_file)?);
+        write_assert!(upstream_file, "Lorem ipsum dolor sit amet\nNew line\n");
 
         add(&upstream, &["file.txt"])?;
         commit(&upstream, "Update file.txt")?;
@@ -490,11 +497,73 @@ mod tests {
 
     #[test]
     fn test_pull() -> Result<(), Box<dyn Error>> {
-        todo!()
+        let (upstream_dir, upstream) = open_test_repo()?;
+        let (repo_dir, repo) = clone_test_repo(&upstream_dir)?;
+        let upstream_path = upstream_dir.path();
+        let repo_path = repo_dir.path();
+
+        let upstream_file = upstream_path.join("file.txt");
+        let new_contents = write_assert!(upstream_file, "Lorem ipsum dolor sit amet\nNew line\n");
+
+        add(&upstream, &["file.txt"])?;
+        commit(&upstream, "Update file.txt")?;
+
+        let old_head = repo.head()?.target();
+        assert!(old_head.is_some(), "Invalid HEAD in the cloned repo");
+        let old_head = old_head.unwrap();
+
+        let pull_result = pull_repo(&repo)?;
+        assert!(pull_result.is_ok());
+        let new_head = pull_result.unwrap();
+
+        assert_ne!(old_head, new_head, "HEAD wasn't updated");
+
+        let repo_file = repo_path.join("file.txt");
+        assert_eq!(new_contents, fs::read_to_string(repo_file)?, "Contents of a file were not updated after pulling");
+
+        upstream_dir.close()?;
+        repo_dir.close()?;
+        Ok(())
     }
 
     #[test]
     fn test_diff() -> Result<(), Box<dyn Error>> {
-        todo!()
+        let (repo_dir, repo) = open_test_repo()?;
+        let repo_path = repo_dir.path();
+
+        let file1 = repo_path.join("file.txt");
+        write_assert!(file1, "New line\nLorem ipsum dolor sit amet\nLine 3\n");
+        let file2 = repo_path.join("meow.txt");
+        write_assert!(file2, "Meow\nMeow\nMeow\nMeow\n:3\n:333\n");
+        let file3 = repo_path.join("foo.txt");
+        write_assert!(file3, "Foo bar baz\n");
+
+        add(&repo, &["file.txt", "meow.txt"])?;
+
+        let diff_bytes = diff_bytes(&repo)?;
+        let diff = from_utf8(diff_bytes.as_slice())?;
+        assert_eq!(r#"diff --git a/file.txt b/file.txt
+index dc8344c..f6110d6 100644
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1,3 @@
++New line
+ Lorem ipsum dolor sit amet
++Line 3
+diff --git a/meow.txt b/meow.txt
+new file mode 100644
+index 0000000..3676365
+--- /dev/null
++++ b/meow.txt
+@@ -0,0 +1,6 @@
++Meow
++Meow
++Meow
++Meow
++:3
++:333
+"#, diff);
+
+        Ok(())
     }
 }
