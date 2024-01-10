@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+if [[ $# < 1 ]]; then
+  echo "usage: $0 <repo>"
+  exit 1
+fi
+
+cp -r $1/ working/
+mv working/$1/.gitted working/$1/.git

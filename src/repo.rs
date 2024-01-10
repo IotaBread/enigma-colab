@@ -292,19 +292,47 @@ mod tests {
         };
     }
 
-    fn clone_test_repo() -> Result<(&Path, Repository), Box<dyn Error>> {
-        let source = PathBuf::from(test_file!("testrepo/.git")).canonicalize()?;
-        let source = source.into_os_string().into_string();
-        assert!(source.is_ok(), "Path contains invalid UTF-8");
+    fn copy_dir_all<P: AsRef<Path>, P2: AsRef<Path>>(src: P, dst: P2) -> IoResult<()> {
+        fs::create_dir_all(&dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
 
-        let source = format!("file://{}", source.unwrap());
+            let dst_entry = dst.as_ref().join(entry.file_name());
+            if file_type.is_dir() {
+                copy_dir_all(entry.path(), dst_entry)?;
+            } else {
+                fs::copy(entry.path(), dst_entry)?;
+            }
+        }
 
-        let target = env::temp_dir().join("testrepo").as_path();
-        let repo = clone_repo(source.as_str(), Some("master"), target.path())?;
+        Ok(())
+    }
+
+    fn setup_test_repo() -> IoResult<PathBuf> {
+        let source = PathBuf::from(test_file!("testrepo/")).canonicalize()?;
+        let dir = env::temp_dir().join("testrepo");
+
+        if !dir.exists() {
+            copy_dir_all(source, &dir)?;
+            fs::rename(&dir.join(".gitted"), &dir.join(".git"))?;
+        }
+
+        Ok(dir)
+    }
+
+    fn clone_test_repo() -> Result<(PathBuf, Repository), Box<dyn Error>> {
+        let upstream_dir = setup_test_repo()?.canonicalize()?;
+        let upstream = upstream_dir.into_os_string().into_string();
+        assert!(upstream.is_ok(), "Path contains invalid UTF-8");
+        let upstream = upstream.unwrap();
+
+        let target = env::temp_dir().join("testrepo_clone");
+        let repo = clone_repo(upstream.as_str(), Some("master"), target.as_path())?;
         Ok((target, repo))
     }
 
-    #[test()]
+    #[test]
     fn test_clone() -> Result<(), Box<dyn Error>> {
         let (target, repo) = clone_test_repo()?;
 
