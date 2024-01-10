@@ -33,11 +33,10 @@ fn open_repo() -> Git2Result<Repository> {
 
 pub async fn clone() -> Result<(String, String), Box<dyn Error>> {
     let settings = read_settings().await?;
-
     let branch = settings.repo.branch;
-    let repo = RepoBuilder::new()
-        .branch(branch.as_str())
-        .clone(settings.repo.url.as_str(), Path::new(DIR))?;
+    let url = settings.repo.url;
+
+    let repo = clone_repo(url.as_str(), Some(branch.as_str()), Path::new(DIR))?;
 
     // TODO: Run on another thread
     run_command(&settings.pull_cmd)?;
@@ -62,6 +61,26 @@ pub async fn list_local_branches() -> Git2Result<Vec<String>> {
     }
 
     Ok(result)
+}
+
+pub fn get_repo_head(repo: &Repository) -> Git2Result<String> {
+    let direct_head = repo.head()?.resolve()?;
+    let target = direct_head.target().unwrap_or(Oid::zero()); // Safe to unwrap, only None if the reference isn't direct
+    Ok(target.to_string())
+}
+
+pub fn get_head() -> Git2Result<String> {
+    let repo = open_repo()?;
+    get_repo_head(&repo)
+}
+
+pub fn clone_repo<P: AsRef<Path>>(uri: &str, branch: Option<&str>, path: P) -> Git2Result<Repository> {
+    let mut builder = RepoBuilder::new();
+    if let Some(branch) = branch {
+        builder.branch(branch);
+    }
+
+    builder.clone(uri, path.as_ref())
 }
 
 pub fn fetch() -> Git2Result<()> {
@@ -142,10 +161,23 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     throw!("Not currently on a branch")
 }
 
-pub fn add(repo: &Repository, path: String) -> Git2Result<()> {
+pub fn add(repo: &Repository, path: &[String]) -> Git2Result<()> {
     let mut index = repo.index()?;
-    index.add_all([path].iter(), IndexAddOption::DEFAULT, None)?;
+    index.add_all(path.iter(), IndexAddOption::DEFAULT, None)?;
     index.write()
+}
+
+/// Based on libgit2's [example commit.c](https://libgit2.org/libgit2/ex/v1.7.1/commit.html)
+pub fn commit(repo: &Repository, message: &str) -> Git2Result<Oid> {
+    let parent = repo.revparse_single("HEAD")?.peel_to_commit()?;
+    let mut index = repo.index()?;
+    let tree_oid = index.write_tree()?;
+    index.write()?;
+
+    let tree = repo.find_tree(tree_oid)?;
+    let signature = repo.signature()?;
+
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent])
 }
 
 fn diff_print(buf: &mut Vec<u8>) -> impl FnMut(DiffDelta<'_>, Option<DiffHunk<'_>>, DiffLine<'_>) -> bool + '_ {
@@ -191,7 +223,7 @@ pub async fn create_patch() -> Result<Vec<u8>, Box<dyn Error>> {
     let repo = open_repo()?;
 
     // Stage changes
-    add(&repo, settings.mappings_file)?;
+    add(&repo, &[settings.mappings_file])?;
 
     // Create the patch
     let patch = diff_bytes(&repo)?;
@@ -249,9 +281,38 @@ pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn get_head() -> Git2Result<String> {
-    let repo = open_repo()?;
-    let direct_head = repo.head()?.resolve()?;
-    let target = direct_head.target().unwrap_or(Oid::zero()); // Safe to unwrap, only None if the reference isn't direct
-    Ok(target.to_string())
+#[cfg(test)]
+mod tests {
+    use std::env;
+    use super::*;
+
+    macro_rules! test_file {
+        ($fname:expr) => {
+            concat!(env!("CARGO_MANIFEST_DIR"), "/resources/test/", $fname)
+        };
+    }
+
+    fn clone_test_repo() -> Result<(&Path, Repository), Box<dyn Error>> {
+        let source = PathBuf::from(test_file!("testrepo/.git")).canonicalize()?;
+        let source = source.into_os_string().into_string();
+        assert!(source.is_ok(), "Path contains invalid UTF-8");
+
+        let source = format!("file://{}", source.unwrap());
+
+        let target = env::temp_dir().join("testrepo").as_path();
+        let repo = clone_repo(source.as_str(), Some("master"), target.path())?;
+        Ok((target, repo))
+    }
+
+    #[test()]
+    fn test_clone() -> Result<(), Box<dyn Error>> {
+        let (target, repo) = clone_test_repo()?;
+
+        assert!(repo.path().exists());
+        let file = target.join("file.txt");
+        assert!(file.exists());
+        assert_eq!(String::from("Lorem ipsum dolor sit amet\n"), fs::read_to_string(file)?);
+
+        Ok(())
+    }
 }
