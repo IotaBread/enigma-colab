@@ -245,6 +245,13 @@ pub fn repo_checkout(repo: &Repository, target_ref: String) -> Result<Oid, Box<d
     Ok(target_oid)
 }
 
+pub async fn checkout() -> Result<String, Box<dyn Error>> {
+    let settings = read_settings().await?;
+    let repo = open_repo()?;
+
+    repo_checkout(&repo, settings.repo.branch).map(|id| id.to_string())
+}
+
 /// Add file contents to the index
 pub fn add(repo: &Repository, path: &[&str]) -> Git2Result<()> {
     let mut index = repo.index()?;

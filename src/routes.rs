@@ -159,22 +159,22 @@ async fn settings_page(_admin_user: AdminUser, flash: Option<FlashMessage<'_>>) 
     })
 }
 
-async fn edit_settings<T: FnOnce(&mut Settings)>(redirect: Redirect, t: T) -> Flash<Redirect> {
+async fn update_settings<T: FnOnce(&mut Settings)>(updater: T) -> Option<String> {
     let mut settings = match settings::read_settings().await {
         Ok(s) => s,
         Err(e) => {
             println!("{}", e);
-            return Flash::error(redirect, format!("Failed to read settings: {e}"))
+            return Some(format!("Failed to read settings: {e}"))
         }
     };
 
-    t(&mut settings);
+    updater(&mut settings);
 
     match settings::write_settings(&settings).await {
-        Ok(_) => Flash::success(redirect, "Settings updated"),
+        Ok(_) => None,
         Err(e) => {
             println!("{}", e);
-            Flash::error(redirect, format!("Failed to write settings: {e}"))
+            Some(format!("Failed to write settings: {e}"))
         }
     }
 }
@@ -183,14 +183,20 @@ async fn edit_settings<T: FnOnce(&mut Settings)>(redirect: Redirect, t: T) -> Fl
 async fn post_settings(_admin_user: AdminUser, settings_data: Form<SettingsData>) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(index));
 
-    edit_settings(redirect, |settings| settings_data.into_inner().write(settings)).await
+    match update_settings(|settings| settings_data.into_inner().write(settings)).await {
+        Some(msg) => Flash::error(redirect, msg),
+        None => Flash::success(redirect, "Settings updated")
+    }
 }
 
 #[post("/settings/repo", data = "<repo_settings>")]
 async fn post_repo_settings(_admin_user: AdminUser, repo_settings: Form<RepoSettings>) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(settings_page));
 
-    edit_settings(redirect, |settings| settings.repo = repo_settings.into_inner()).await
+    match update_settings(|settings| settings.repo = repo_settings.into_inner()).await {
+        Some(msg) => Flash::error(redirect, msg),
+        None => Flash::success(redirect, "Settings updated")
+    }
 }
 
 #[get("/settings", rank = 2)]
@@ -263,6 +269,21 @@ async fn pull(_admin_user: AdminUser) -> Flash<Redirect> {
             Err(msg) => Flash::success(redirect, format!("Not updated: {msg}"))
         } },
         Err(e) => Flash::error(redirect, format!("Failed to pull from repo: {e}"))
+    }
+}
+
+#[post("/checkout", data = "<repo_settings>")]
+async fn checkout(_admin_user: AdminUser, repo_settings: Form<RepoSettings>) -> Flash<Redirect> {
+    let redirect = Redirect::to(uri!(settings_page));
+
+    let branch = repo_settings.branch.clone();
+    if let Some(msg) = update_settings(|settings| settings.repo = repo_settings.into_inner()).await {
+        return Flash::error(redirect, msg);
+    }
+
+    match repo::checkout().await {
+        Ok(rev) => Flash::success(redirect, format!("Checked out {branch}: HEAD is now at {rev}")),
+        Err(e) => Flash::error(redirect, format!("Failed to checkout {branch}: {e}"))
     }
 }
 
@@ -349,6 +370,6 @@ pub fn routes() -> Vec<Route> {
     routes![index,
         login, login_page, login_form, logout,
         settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect,
-        clone_repo, fetch, pull,
+        clone_repo, fetch, pull, checkout,
         new_session_page, new_session_form, session_page, session_patch, session_events, finish_session]
 }

@@ -25,7 +25,7 @@
             <option selected="{{ settings.repo.branch == branch }}" value="{{ branch }}">{{ branch }}</option>
         {% endfor %}</select>
         {% endif %}
-        <button formaction="/checkout" formtarget="_blank" disabled>Checkout</button> {# TODO: if not current branch #}
+        <button formaction="/checkout">Checkout</button> {# TODO: if not current branch #}
         <br>
         <input type="submit" value="Save repo settings" />
     </form>

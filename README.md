@@ -29,7 +29,7 @@ In no particular order
 - [ ] [Admin] Better settings UI
 - [ ] [Admin] Git pull feedback
 - [x] Use git2 instead of invoking git as a command
-- [ ] Allow changing branches
-- [ ] Tests for git-related functions
+- [x] Allow changing branches
+- [x] Tests for git-related functions
 - [ ] Releases
 - [ ] Documentation
