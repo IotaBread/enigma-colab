@@ -263,7 +263,7 @@ async fn fetch(_admin_user: AdminUser) -> Flash<Redirect> {
 async fn pull(_admin_user: AdminUser) -> Flash<Redirect> {
     let redirect = Redirect::to(uri!(settings_page));
 
-    match repo::pull() {
+    match repo::pull().await {
         Ok(res) => { match res {
             Ok(rev) => Flash::success(redirect, format!("Pulled remote: HEAD is now at {rev}")),
             Err(msg) => Flash::success(redirect, format!("Not updated: {msg}"))

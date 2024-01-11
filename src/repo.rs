@@ -114,9 +114,16 @@ pub fn fetch_repo(repo: &Repository) -> Git2Result<()> {
     Ok(())
 }
 
-pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
+pub async fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     let repo = open_repo()?;
-    pull_repo(&repo).map(|r| { r.map(|id| id.to_string()) })
+
+    let result = pull_repo(&repo).map(|r| { r.map(|id| id.to_string()) })?;
+    if result.is_ok() {
+        let settings = read_settings().await?;
+        run_command(&settings.pull_cmd)?;
+    }
+
+    Ok(result)
 }
 
 /// Based on libgit2's [example merge.c](https://libgit2.org/libgit2/ex/v1.7.1/merge.html)
