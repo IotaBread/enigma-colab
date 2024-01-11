@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::str::from_utf8;
 
-use git2::{BranchType, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffLineType, FetchOptions, IndexAddOption, ObjectType, Oid, Repository, ResetType, StatusOptions};
+use git2::{AnnotatedCommit, BranchType, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffLineType, FetchOptions, IndexAddOption, ObjectType, Oid, Repository, ResetType, StatusOptions};
 use git2::build::{CheckoutBuilder, RepoBuilder};
 
 use crate::settings::read_settings;
@@ -119,18 +119,16 @@ pub fn pull() -> Result<Result<String, String>, Box<dyn Error>> {
     pull_repo(&repo).map(|r| { r.map(|id| id.to_string()) })
 }
 
-
 /// Based on libgit2's [example merge.c](https://libgit2.org/libgit2/ex/v1.7.1/merge.html)
+///
+/// The successful (inner) result has either the new HEAD hash, or a message specifying why it wasn't updated
 pub fn pull_repo(repo: &Repository) -> Result<Result<Oid, String>, Box<dyn Error>> {
     let mut head_ref = repo.head()?;
 
     if let Some(current_branch) = head_ref.shorthand() {
         let branch = repo.find_branch(current_branch, BranchType::Local)?;
         // current_branch is the simple name, we need it's full name (i.e. refs/heads/branch)
-        let branch_ref = match branch.get().name() {
-            Some(s) => s,
-            None => { throw!("Branch ref has an invalid name"); }
-        };
+        let branch_ref = branch.get().name().ok_or("Branch ref has an invalid name")?;
 
         let remote_name = repo.branch_upstream_remote(branch_ref)?;
         let remote_name = remote_name.as_str().unwrap_or("<unknown remote>");
@@ -166,12 +164,96 @@ pub fn pull_repo(repo: &Repository) -> Result<Result<Oid, String>, Box<dyn Error
     throw!("Not currently on a branch")
 }
 
+fn resolve_ref<'r>(repo: &'r Repository, target_ref: &String) -> Git2Result<Option<AnnotatedCommit<'r>>> {
+    let resolved = repo.resolve_reference_from_short_name(target_ref.as_str());
+
+    if let Ok(resolved_ref) = resolved {
+        let commit = repo.reference_to_annotated_commit(&resolved_ref)?;
+        return Ok(Some(commit))
+    }
+
+    let resolved = repo.revparse_single(target_ref);
+    if let Ok(resolved_obj) = resolved {
+        let commit = repo.find_annotated_commit(resolved_obj.id())?;
+        return Ok(Some(commit))
+    }
+
+    Ok(None)
+}
+
+fn guess_ref<'r>(repo: &'r Repository, target_ref: &String) -> Git2Result<Option<AnnotatedCommit<'r>>> {
+    let remotes = repo.remotes()?;
+
+    let mut error = None;
+
+    for remote in remotes.iter() {
+        if let Some(remote) = remote {
+            let refname = format!("refs/remotes/{}/{}", remote, target_ref);
+
+            let found_ref = match repo.find_reference(refname.as_str()) {
+                Ok(r) => r,
+                Err(e) => {
+                    error = Some(e);
+                    continue;
+                }
+            };
+
+            let commit = repo.reference_to_annotated_commit(&found_ref)?;
+            return Ok(Some(commit))
+        }
+    }
+
+    if error.is_some() {
+        Err(error.unwrap())
+    } else {
+        Ok(None)
+    }
+}
+
+/// Change the HEAD reference to the specified one, updating the working tree
+///
+/// Based on libgit2's [example checkout.c](https://libgit2.org/libgit2/ex/v1.7.1/checkout.html)
+pub fn repo_checkout(repo: &Repository, target_ref: String) -> Result<Oid, Box<dyn Error>> {
+    let target = resolve_ref(repo, &target_ref)?
+        .or(guess_ref(repo, &target_ref)?)
+        .ok_or("Reference not found")?;
+
+    let mut options = CheckoutBuilder::new();
+    options.safe();
+
+    let target_oid = target.id();
+    let target_commit = repo.find_commit(target_oid)?;
+
+    repo.checkout_tree(target_commit.as_object(), Some(&mut options))?;
+
+    if let Some(target_refname) = target.refname() {
+        let checkout_ref = repo.find_reference(target_refname)?;
+
+        if checkout_ref.is_remote() {
+            let branch = repo.branch_from_annotated_commit(target_ref.as_str(), &target, false)?;
+            let branch_ref = branch.into_reference();
+            let refname = branch_ref.name().ok_or("Invalid branch name")?;
+
+            repo.set_head(refname)?;
+        } else {
+            repo.set_head(target_refname)?;
+        };
+    } else {
+        repo.set_head_detached_from_annotated(target)?;
+    }
+
+    Ok(target_oid)
+}
+
+/// Add file contents to the index
 pub fn add(repo: &Repository, path: &[&str]) -> Git2Result<()> {
     let mut index = repo.index()?;
     index.add_all(path.iter(), IndexAddOption::DEFAULT, None)?;
     index.write()
 }
 
+/// Create a new commit with the changes in the index and the given message
+///
 /// Based on libgit2's [example commit.c](https://libgit2.org/libgit2/ex/v1.7.1/commit.html)
 pub fn commit(repo: &Repository, message: &str) -> Git2Result<Oid> {
     let parent = repo.revparse_single("HEAD")?.peel_to_commit()?;
@@ -211,6 +293,8 @@ fn diff_print(buf: &mut Vec<u8>) -> impl FnMut(DiffDelta<'_>, Option<DiffHunk<'_
     };
 }
 
+/// Generate a patch diff of the changes in the index, and return its bytes
+///
 /// Equivalent to `git diff --cached`
 pub fn diff_bytes(repo: &Repository) -> Git2Result<Vec<u8>> {
     let head = repo.revparse_single("HEAD")?;
@@ -294,6 +378,7 @@ pub async fn clear_working_tree() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use std::env;
+
     use git2::Status;
     use tempfile::TempDir;
 
@@ -564,6 +649,38 @@ index 0000000..3676365
 +:333
 "#, diff);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_checkout() -> Result<(), Box<dyn Error>> {
+        let (upstream_dir, upstream) = open_test_repo()?;
+        let (repo_dir, repo) = clone_test_repo(&upstream_dir)?;
+        let upstream_path = upstream_dir.path();
+        let repo_path = repo_dir.path();
+
+        let head_commit = upstream.head()?.peel_to_commit()?;
+        upstream.branch("test", &head_commit, false)?;
+        let upstream_checkout_oid = repo_checkout(&upstream, "test".to_string())?;
+
+        assert_eq!(head_commit.id(), upstream_checkout_oid, "Checked out a wrong ref");
+
+        let upstream_file = upstream_path.join("file.txt");
+        let new_contents = write_assert!(upstream_file, "Lorem ipsum dolor sit amet\nNew line\n");
+
+        add(&upstream, &["file.txt"])?;
+        let new_head_oid = commit(&upstream, "Update file.txt")?;
+
+        fetch_repo(&repo)?;
+        let checkout_oid = repo_checkout(&repo, "test".to_string())?;
+
+        assert_eq!(new_head_oid, checkout_oid, "Checked out a wrong ref");
+
+        let repo_file = repo_path.join("file.txt");
+        assert_eq!(new_contents, fs::read_to_string(repo_file)?, "Contents of a file were not updated after checking out");
+
+        upstream_dir.close()?;
+        repo_dir.close()?;
         Ok(())
     }
 }
