@@ -243,6 +243,7 @@ async fn clone_repo(_admin: AdminUser) -> Flash<Redirect> {
         return Flash::error(redirect, "A repository already exists, can't clone");
     }
 
+    // TODO: Send "cloning..." response, update once done?
     match repo::clone().await {
         Ok((branch, rev)) =>
             Flash::success(redirect, format!("Cloned repo, with branch '{branch}' at {rev}")),
@@ -345,10 +346,10 @@ async fn session_patch(id: Uuid, sessions: SessionsState<'_>) -> Option<NamedFil
     }
 }
 
-#[get("/sessions/<id>/events")]
-async fn session_events(id: Uuid, _admin_user: AdminUser) -> Redirect {
+#[get("/sessions/<id>/log")]
+async fn session_log(id: Uuid, _admin_user: AdminUser) -> &'static str {
     // TODO
-    Redirect::to(uri!(session_page(id)))
+    "Session log goes here"
 }
 
 #[post("/sessions/<id>/finish")]
@@ -371,5 +372,5 @@ pub fn routes() -> Vec<Route> {
         login, login_page, login_form, logout,
         settings_page, post_settings, post_repo_settings, settings_unauthorized, settings_redirect,
         clone_repo, fetch, pull, checkout,
-        new_session_page, new_session_form, session_page, session_patch, session_events, finish_session]
+        new_session_page, new_session_form, session_page, session_patch, session_log, finish_session]
 }

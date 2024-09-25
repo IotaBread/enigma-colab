@@ -154,7 +154,7 @@ impl Session {
             .stdout(stdout)
             .stderr(stderr)
             .arg("-cp")
-            .arg(settings.classpath)
+            .arg(settings.classpath) // TODO: Launch through gradle
             .arg(settings.enigma_main_class)
             .arg("-jar")
             .arg(settings.jar_file)
